@@ -1,78 +1,43 @@
 # Agent-stuff
 
-Personal add-ons for the [pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent):
+Personal extensions and skills for the [pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent).
 
-- Custom **extensions** (TypeScript)
-- Reusable **skills** (markdown instructions)
-
-## Repository Structure
+## Layout
 
 ```text
-.
-├── extensions/
-│   ├── notify.ts
-│   └── review.ts
-└── skills/
-    ├── commit/
-    │   └── SKILL.md
-    └── github/
-        └── SKILL.md
+extensions/            TypeScript extensions
+  notify.ts            OSC 777 desktop notification on turn end
+  review.ts            /review workflow (uncommitted | branch | commit | pr | folder)
+  uv.ts                Force Python tooling through uv
+intercepted-commands/  PATH shims activated by uv.ts (pip, poetry, python, …)
+skills/                Markdown instruction sets
+  commit/              Conventional Commit messages
+  github/              `gh` CLI usage (PRs, runs, API)
+  librarian/           Cache + reuse remote git checkouts
+  uv/                  uv project setup, build/publish, PEP-723 scripts
 ```
 
-## Included Extensions
+## Extensions
 
-### `extensions/notify.ts`
+- **notify.ts** — Native terminal notification when the agent awaits input. OSC 777, no deps, markdown→plain-text body.
+- **review.ts** — `/review` interactive or direct: `uncommitted`, `branch <base>`, `commit <sha>`, `pr <n|url>`, `folder <paths…>`. Optional loop-fix mode, `/end-review` to return/summarize, auto-loads `REVIEW_GUIDELINES.md` from the project root (where `.pi` lives).
+- **uv.ts** — Prepends `intercepted-commands/` to `$PATH` and blocks disallowed invocations at bash spawn time (catches bypasses like `.venv/bin/python -m pip …`), returning the uv equivalent. Pairs with `intercepted-commands/` and `skills/uv/`.
 
-Desktop notification extension that sends a native terminal notification when the agent finishes a turn and is waiting for input.
+## Intercepted Commands
 
-- Uses OSC 777 escape sequence
-- No external runtime dependencies
-- Best effort markdown-to-plain-text formatting for notification body
+Shims that exit non-zero with a uv-equivalent hint:
 
-### `extensions/review.ts`
+- `pip`, `pip3` → `uv add` / `uv run --with PACKAGE`
+- `poetry` → `uv init` / `uv add` / `uv sync` / `uv run`
+- `python`, `python3` → blocks `-m pip|venv|py_compile`; otherwise transparently `exec uv run --python <real-interp> python "$@"` so `python foo.py` runs in a uv-managed env
 
-A full `/review` workflow extension for reviewing code changes from inside pi.
+`pip3`→`pip` and `python3`→`python` are symlinks. Auto-activated by `uv.ts`; prepend the dir to your shell `$PATH` to use outside pi.
 
-Features:
+## Usage
 
-- `/review` interactive mode
-- Direct commands:
-  - `/review uncommitted`
-  - `/review branch <base-branch>`
-  - `/review commit <sha>`
-  - `/review pr <number-or-url>`
-  - `/review folder <paths...>`
-- Optional shared custom review instructions
-- Optional “loop fixing” mode (iterate review → fix until no blocking findings)
-- `/end-review` command to return to origin and optionally summarize/apply fixes
-- Auto-loads `REVIEW_GUIDELINES.md` from project root (where `.pi` exists)
+Copy extension files and skill folders into your pi locations and enable them in your pi config. See pi docs for exact paths.
 
-## Included Skills
+## Notes
 
-### `skills/commit/SKILL.md`
-
-Guidance for creating concise Conventional Commit messages and making safe commits.
-
-### `skills/github/SKILL.md`
-
-Guidance for using `gh` CLI for PR checks, workflow runs, and GitHub API queries.
-
-## Using This Repo
-
-This repo is intended as a source of reusable files. Typical usage:
-
-1. Copy extension files into your pi extensions location.
-2. Copy skill folders into your pi skills location.
-3. Enable/load them in your pi configuration.
-
-> Exact paths/config can vary by setup. If needed, see pi docs for extension and skill loading.
-
-## Development Notes
-
-- Extensions are written in TypeScript and target pi extension APIs.
-- Skills are plain markdown files with frontmatter.
-- Keep each skill in its own folder with `SKILL.md`.
-
-## License
-
-No license file is currently included.
+- Extensions: TypeScript, pi extension APIs.
+- Skills: markdown with frontmatter, one folder per skill containing `SKILL.md`.
