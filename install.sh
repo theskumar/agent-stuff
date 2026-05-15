@@ -34,6 +34,13 @@ for prompt in "$REPO_DIR"/prompts/*.md; do
   link "$prompt" "$HOME/.pi/agent/prompts/$name"
 done
 
+echo "==> Skills → ~/.claude/skills/ (Claude Code)"
+# Skills that should be available in both pi and Claude Code
+CC_SKILLS=(commit github librarian uv)
+for name in "${CC_SKILLS[@]}"; do
+  link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
+done
+
 echo "==> Claude commands"
 # security/audit → reuse prompts/security-audit.md
 link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audit.md"
