@@ -32,6 +32,7 @@ skills/                      Markdown instruction sets (SKILL.md per folder)
   librarian/                 Cache + reuse remote git checkouts
   native-web-search/         Trigger native web search
   skill-creator/             Create / edit / eval skills
+  summarize/                 URL/PDF/DOCX → Markdown + optional haiku summary
   uv/                        uv project setup, build/publish, PEP-723
 
 prompts/                     Prompt templates (pi: /name, claude: /name)
