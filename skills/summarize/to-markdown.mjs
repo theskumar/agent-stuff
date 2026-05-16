@@ -19,7 +19,7 @@
  *   node to-markdown.mjs ./spec.pdf --summary --prompt "..." --pi-model claude-sonnet-4-5
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { basename, join } from 'path';
 import { tmpdir } from 'os';
 import { spawnSync } from 'child_process';
@@ -148,22 +148,55 @@ for (let i = 0; i < argv.length; i++) {
 
 if (!input) usageAndExit(1);
 
+function fetchUrlToTmp(url) {
+  // Pre-fetch URLs with curl using a browser Accept header to avoid servers returning
+  // 406 Not Acceptable when markitdown's "Accept: text/markdown" preference confuses them.
+  const tmpFile = join(tmpdir(), `pi-markitdown-fetch-${Date.now().toString(36)}.html`);
+  const result = spawnSync('curl', [
+    '-sL',
+    '-o', tmpFile,
+    '-H', 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    '-H', 'User-Agent: Mozilla/5.0 (compatible; markitdown-fetcher)',
+    '--max-time', '30',
+    url
+  ], { encoding: 'utf-8' });
+  if (result.error) throw new Error(`curl failed: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`curl exited ${result.status}: ${(result.stderr || '').trim()}`);
+  return tmpFile;
+}
+
 function runMarkitdown(arg) {
   // Include PDF support by default because many document URLs (for example arXiv PDFs)
   // are detected as PDFs only after fetching, so extension-based switching is unreliable.
-  const result = spawnSync('uvx', ['--from', 'markitdown[pdf]', 'markitdown', arg], {
-    encoding: 'utf-8',
-    maxBuffer: 50 * 1024 * 1024
-  });
+  //
+  // For URLs, pre-fetch with curl first to avoid 406 errors: some servers reject markitdown's
+  // "Accept: text/markdown" primary preference with 406 Not Acceptable.
+  let resolvedArg = arg;
+  let tmpFetched = null;
+  if (isUrl(arg)) {
+    tmpFetched = fetchUrlToTmp(arg);
+    resolvedArg = tmpFetched;
+  }
 
-  if (result.error) {
-    throw new Error(`Failed to run uvx markitdown: ${result.error.message}`);
+  try {
+    const result = spawnSync('uvx', ['--from', 'markitdown[pdf]', 'markitdown', resolvedArg], {
+      encoding: 'utf-8',
+      maxBuffer: 50 * 1024 * 1024
+    });
+
+    if (result.error) {
+      throw new Error(`Failed to run uvx markitdown: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      const stderr = (result.stderr || '').trim();
+      throw new Error(`markitdown failed for ${arg}${stderr ? `\n${stderr}` : ''}`);
+    }
+    return result.stdout;
+  } finally {
+    if (tmpFetched) {
+      try { unlinkSync(tmpFetched); } catch {}
+    }
   }
-  if (result.status !== 0) {
-    const stderr = (result.stderr || '').trim();
-    throw new Error(`markitdown failed for ${arg}${stderr ? `\n${stderr}` : ''}`);
-  }
-  return result.stdout;
 }
 
 function summarizeWithPi(markdown, { mdPathForNote = null, extraPrompt = null } = {}) {
