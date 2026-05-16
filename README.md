@@ -24,7 +24,7 @@ intercepted-commands/        PATH shims activated by uv.ts
   python, python3            → uv run --python
 
 skills/                      Markdown instruction sets (SKILL.md per folder)
-  architecture-decision-records/  ADR authoring
+  adr/                       Architecture Decision Records (ADRs)
   browser-tools/             Chrome DevTools automation via CDP
   commit/                    Conventional Commit messages
   github/                    gh CLI (PRs, issues, runs, API)
