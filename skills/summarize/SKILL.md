@@ -47,16 +47,16 @@ Summaries are only useful when you provide **what you want extracted** and the *
 node to-markdown.mjs <url-or-path> --summary --prompt "Summarize focusing on X, for audience Y. Extract Z."
 ```
 
-To override the model or provider (defaults: `github-copilot`, `haiku`):
+Default provider/model is `github-copilot` / `haiku` (fuzzy pattern — matches whatever haiku variant the provider currently exposes, so it stays valid across model version bumps).
+
+To use a different model or provider:
 
 ```bash
+# Use sonnet instead of haiku
+node to-markdown.mjs <url-or-path> --summary --prompt "..." --pi-model sonnet
+
+# Use Anthropic directly
 node to-markdown.mjs <url-or-path> --summary --prompt "..." --pi-provider anthropic --pi-model haiku
-```
-
-Or:
-
-```bash
-node to-markdown.mjs <url-or-path> --summary --prompt "Focus on security implications and action items."
 ```
 
 This will:
