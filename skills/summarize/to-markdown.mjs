@@ -165,37 +165,48 @@ function fetchUrlToTmp(url) {
   return tmpFile;
 }
 
+function spawnMarkitdown(arg) {
+  return spawnSync('uvx', ['--from', 'markitdown[pdf]', 'markitdown', arg], {
+    encoding: 'utf-8',
+    maxBuffer: 50 * 1024 * 1024
+  });
+}
+
 function runMarkitdown(arg) {
-  // Include PDF support by default because many document URLs (for example arXiv PDFs)
-  // are detected as PDFs only after fetching, so extension-based switching is unreliable.
-  //
-  // For URLs, pre-fetch with curl first to avoid 406 errors: some servers reject markitdown's
-  // "Accept: text/markdown" primary preference with 406 Not Acceptable.
-  let resolvedArg = arg;
-  let tmpFetched = null;
-  if (isUrl(arg)) {
-    tmpFetched = fetchUrlToTmp(arg);
-    resolvedArg = tmpFetched;
+  // Try markitdown's native URL fetching first.
+  // Fall back to pre-fetching with curl if it fails (e.g. 406 Not Acceptable —
+  // some servers reject markitdown's "Accept: text/markdown" primary preference).
+  if (!isUrl(arg)) {
+    const result = spawnMarkitdown(arg);
+    if (result.error) throw new Error(`Failed to run uvx markitdown: ${result.error.message}`);
+    if (result.status !== 0) {
+      throw new Error(`markitdown failed for ${arg}\n${(result.stderr || '').trim()}`);
+    }
+    return result.stdout;
   }
 
-  try {
-    const result = spawnSync('uvx', ['--from', 'markitdown[pdf]', 'markitdown', resolvedArg], {
-      encoding: 'utf-8',
-      maxBuffer: 50 * 1024 * 1024
-    });
+  // --- URL path: try direct first, curl fallback on failure ---
+  const direct = spawnMarkitdown(arg);
+  if (!direct.error && direct.status === 0) return direct.stdout;
 
-    if (result.error) {
-      throw new Error(`Failed to run uvx markitdown: ${result.error.message}`);
-    }
+  // Direct failed — retry via curl pre-fetch
+  const tmpFetched = fetchUrlToTmp(arg);
+  try {
+    const result = spawnMarkitdown(tmpFetched);
+    if (result.error) throw new Error(`Failed to run uvx markitdown: ${result.error.message}`);
     if (result.status !== 0) {
-      const stderr = (result.stderr || '').trim();
-      throw new Error(`markitdown failed for ${arg}${stderr ? `\n${stderr}` : ''}`);
+      // Surface both the original and curl-fallback errors for easier debugging
+      const origErr = (direct.stderr || '').trim();
+      const fallbackErr = (result.stderr || '').trim();
+      throw new Error(
+        `markitdown failed for ${arg}` +
+        (origErr ? `\n[direct] ${origErr}` : '') +
+        (fallbackErr ? `\n[curl fallback] ${fallbackErr}` : '')
+      );
     }
     return result.stdout;
   } finally {
-    if (tmpFetched) {
-      try { unlinkSync(tmpFetched); } catch {}
-    }
+    try { unlinkSync(tmpFetched); } catch {}
   }
 }
 
