@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Convert a URL or local file to Markdown using `uvx markitdown`.
- * Optionally summarize the produced Markdown via `pi` (claude-haiku-4-5).
+ * Optionally summarize the produced Markdown via `pi` (claude-haiku-4.5).
  *
  * Note: `markitdown` can fetch URLs on its own; this script mainly adds:
  *   - optional writing to a temp file / specific output path
@@ -72,7 +72,7 @@ let writeTmp = false;
 let doSummary = false;
 let summaryPrompt = null;
 let piProvider = 'github-copilot';
-let piModel = 'claude-haiku-4-5';
+let piModel = 'haiku';
 
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];

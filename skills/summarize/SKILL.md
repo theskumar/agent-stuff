@@ -39,7 +39,7 @@ Write Markdown to a specific file:
 uvx --from 'markitdown[pdf]' markitdown <url-or-path> > /tmp/doc.md
 ```
 
-### Convert + summarize with haiku-4-5 (pass context!)
+### Convert + summarize with haiku (pass context!)
 
 Summaries are only useful when you provide **what you want extracted** and the **audience/purpose**.
 
@@ -47,10 +47,10 @@ Summaries are only useful when you provide **what you want extracted** and the *
 node to-markdown.mjs <url-or-path> --summary --prompt "Summarize focusing on X, for audience Y. Extract Z."
 ```
 
-To override the model or provider (defaults: `github-copilot`, `claude-haiku-4-5`):
+To override the model or provider (defaults: `github-copilot`, `haiku`):
 
 ```bash
-node to-markdown.mjs <url-or-path> --summary --prompt "..." --pi-provider anthropic --pi-model claude-haiku-4-5
+node to-markdown.mjs <url-or-path> --summary --prompt "..." --pi-provider anthropic --pi-model haiku
 ```
 
 Or:
@@ -62,4 +62,4 @@ node to-markdown.mjs <url-or-path> --summary --prompt "Focus on security implica
 This will:
 1) convert to Markdown via `uvx --from 'markitdown[pdf]' markitdown`
 2) write the full Markdown to a temp `.md` file and print its path as a "Hint" line
-3) run `pi --provider github-copilot --model claude-haiku-4-5` (no-tools, no-session) to summarize using your extra prompt
+3) run `pi --provider github-copilot --model haiku` (no-tools, no-session) to summarize using your extra prompt
