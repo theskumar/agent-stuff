@@ -16,7 +16,12 @@ import { Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
  */
 const notify = (title: string, body: string): void => {
   // OSC 777 format: ESC ] 777 ; notify ; title ; body BEL
-  process.stdout.write(`\x1b]777;notify;${title};${body}\x07`);
+  // Inside tmux, wrap with DCS passthrough (ESC chars must be doubled).
+  if (process.env.TMUX) {
+    process.stdout.write(`\x1bPtmux;\x1b\x1b]777;notify;${title};${body}\x07\x1b\\`);
+  } else {
+    process.stdout.write(`\x1b]777;notify;${title};${body}\x07`);
+  }
 };
 
 const isTextPart = (part: unknown): part is { type: "text"; text: string } =>
