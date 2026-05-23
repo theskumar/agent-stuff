@@ -18,6 +18,7 @@ extensions/                  pi TypeScript extensions
   titlebar-spinner.ts         Braille spinner animation in terminal title while agent works
   prompt-editor.ts            Mode system (named model+thinking presets) and cross-session prompt history
   review.ts                  /review workflow (uncommitted | branch | commit | pr | folder)
+  snake.ts                    Snake game (/snake command)
   uv.ts                      Force Python tooling through uv
 
 intercepted-commands/        PATH shims activated by uv.ts
@@ -35,6 +36,7 @@ skills/                      Markdown instruction sets (SKILL.md per folder)
   native-web-search/         Trigger native web search
   skill-creator/             Create / edit / eval skills
   summarize/                 URL/PDF/DOCX → Markdown + optional haiku summary
+  tmux/                      Remote control tmux sessions for interactive CLIs
   uv/                        uv project setup, build/publish, PEP-723
 
 prompts/                     Prompt templates (pi: /name, claude: /name)
