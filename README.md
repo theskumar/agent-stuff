@@ -19,6 +19,7 @@ extensions/                  pi TypeScript extensions
   prompt-editor.ts            Mode system (named model+thinking presets) and cross-session prompt history
   review.ts                  /review workflow (uncommitted | branch | commit | pr | folder)
   snake.ts                    Snake game (/snake command)
+  multi-edit.ts               Replaces built-in edit with multi-file edits[] and Codex `patch` support
   uv.ts                      Force Python tooling through uv
 
 intercepted-commands/        PATH shims activated by uv.ts
