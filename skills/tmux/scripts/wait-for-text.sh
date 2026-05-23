@@ -11,9 +11,10 @@ Options:
   -t, --target    tmux target (session:window.pane), required
   -p, --pattern   regex pattern to look for, required
   -F, --fixed     treat pattern as a fixed string (grep -F)
+  -S, --socket    tmux socket path (passed as `tmux -S`); default: tmux's default server
   -T, --timeout   seconds to wait (integer, default: 15)
   -i, --interval  poll interval in seconds (default: 0.5)
-  -l, --lines     number of history lines to inspect (integer, default: 1000)
+  -l, --lines     number of history lines to inspect (integer, default: 2000)
   -h, --help      show this help
 USAGE
 }
@@ -21,15 +22,17 @@ USAGE
 target=""
 pattern=""
 grep_flag="-E"
+socket=""
 timeout=15
 interval=0.5
-lines=1000
+lines=2000
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -t|--target)   target="${2-}"; shift 2 ;;
     -p|--pattern)  pattern="${2-}"; shift 2 ;;
     -F|--fixed)    grep_flag="-F"; shift ;;
+    -S|--socket)   socket="${2-}"; shift 2 ;;
     -T|--timeout)  timeout="${2-}"; shift 2 ;;
     -i|--interval) interval="${2-}"; shift 2 ;;
     -l|--lines)    lines="${2-}"; shift 2 ;;
@@ -59,13 +62,18 @@ if ! command -v tmux >/dev/null 2>&1; then
   exit 1
 fi
 
+tmux_args=()
+if [[ -n "$socket" ]]; then
+  tmux_args+=(-S "$socket")
+fi
+
 # End time in epoch seconds (integer, good enough for polling)
 start_epoch=$(date +%s)
 deadline=$((start_epoch + timeout))
 
 while true; do
   # -J joins wrapped lines, -S uses negative index to read last N lines
-  pane_text="$(tmux capture-pane -p -J -t "$target" -S "-${lines}" 2>/dev/null || true)"
+  pane_text="$(tmux ${tmux_args[@]+"${tmux_args[@]}"} capture-pane -p -J -t "$target" -S "-${lines}" 2>/dev/null || true)"
 
   if printf '%s\n' "$pane_text" | grep $grep_flag -- "$pattern" >/dev/null 2>&1; then
     exit 0
