@@ -10,45 +10,64 @@ Personal extensions, skills, and prompts for [pi](https://www.npmjs.com/package/
 
 Creates symlinks from `~/.agents/skills/`, `~/.pi/agent/extensions/`, `~/.pi/agent/prompts/`, and `~/.claude/commands/` into this repo. Re-run after adding new items. Existing non-symlink files are skipped.
 
-## Layout
+## Extensions
 
-```
-extensions/                  pi TypeScript extensions
-  notify.ts                  OSC 777 desktop notification on turn end
-  titlebar-spinner.ts         Braille spinner animation in terminal title while agent works
-  prompt-editor.ts            Mode system (named model+thinking presets) and cross-session prompt history
-  review.ts                  /review workflow (uncommitted | branch | commit | pr | folder)
-  snake.ts                    Snake game (/snake command)
-  multi-edit.ts               Replaces built-in edit with multi-file edits[] and Codex `patch` support
-  uv.ts                      Force Python tooling through uv
+pi TypeScript extensions. Source: [`extensions/`](extensions/).
 
-intercepted-commands/        PATH shims activated by uv.ts
-  pip, pip3                  → uv add / uv run --with
-  poetry                    → uv init / uv add / uv sync / uv run
-  python, python3            → uv run --python
+| Extension | Purpose |
+|---|---|
+| [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
+| [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
+| [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history |
+| [`titlebar-spinner.ts`](extensions/titlebar-spinner.ts) | Braille spinner in terminal title while agent works |
+| [`notify.ts`](extensions/notify.ts) | OSC 777 desktop notification on turn end |
+| [`snake.ts`](extensions/snake.ts) | `/snake` game |
+| [`uv.ts`](extensions/uv.ts) | Force Python tooling through `uv` |
+| [`files.ts`](extensions/files.ts) | File tool tweaks |
 
-skills/                      Markdown instruction sets (SKILL.md per folder)
-  adr/                       Architecture Decision Records (ADRs)
-  browser-tools/             Chrome DevTools automation via CDP
-  commit/                    Conventional Commit messages
-  github/                    gh CLI (PRs, issues, runs, API)
-  grill-me/                  Stress-test a plan via relentless questioning
-  librarian/                 Cache + reuse remote git checkouts
-  native-web-search/         Trigger native web search
-  skill-creator/             Create / edit / eval skills
-  summarize/                 URL/PDF/DOCX → Markdown + optional haiku summary
-  tmux/                      Remote control tmux sessions for interactive CLIs
-  uv/                        uv project setup, build/publish, PEP-723
+### PATH shims (activated by `uv.ts`)
 
-prompts/                     Prompt templates (pi: /name, claude: /name)
-  security-audit.md          Comprehensive security audit (OWASP, deps, secrets)
-```
+Source: [`intercepted-commands/`](intercepted-commands/).
 
-## Symlink Targets
+| Shim | Redirects to |
+|---|---|
+| [`pip`](intercepted-commands/pip), [`pip3`](intercepted-commands/pip3) | `uv add` / `uv run --with` |
+| [`poetry`](intercepted-commands/poetry) | `uv init` / `uv add` / `uv sync` / `uv run` |
+| [`python`](intercepted-commands/python), [`python3`](intercepted-commands/python3) | `uv run --python` |
+
+## Skills
+
+Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skills/).
+
+| Skill | Purpose |
+|---|---|
+| [`adr`](skills/adr/) | Architecture Decision Records |
+| [`browser-tools`](skills/browser-tools/) | Chrome DevTools automation via CDP |
+| [`commit`](skills/commit/) | Conventional Commit messages |
+| [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
+| [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
+| [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
+| [`native-web-search`](skills/native-web-search/) | Trigger native web search |
+| [`skill-creator`](skills/skill-creator/) | Create, edit, and eval skills |
+| [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
+| [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
+| [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
+
+## Prompts
+
+Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
+
+| Prompt | Purpose |
+|---|---|
+| [`security-audit.md`](prompts/security-audit.md) | Comprehensive security audit (OWASP, deps, secrets) |
+
+## Symlink targets
 
 | Source | Target |
-|--------|--------|
-| `skills/*` | `~/.agents/skills/*` |
-| `extensions/*.ts` | `~/.pi/agent/extensions/*.ts` |
-| `prompts/*.md` | `~/.pi/agent/prompts/*.md` |
-| `prompts/security-audit.md` | `~/.claude/commands/security/audit.md` |
+|---|---|
+| [`skills/*`](skills/) | `~/.agents/skills/*` |
+| [`extensions/*.ts`](extensions/) | `~/.pi/agent/extensions/*.ts` |
+| [`prompts/*.md`](prompts/) | `~/.pi/agent/prompts/*.md` |
+| [`prompts/security-audit.md`](prompts/security-audit.md) | `~/.claude/commands/security/audit.md` |
+
+See [`AGENTS.md`](AGENTS.md) for conventions when adding new items.
