@@ -15,6 +15,7 @@ Creates symlinks from `~/.agents/skills/`, `~/.pi/agent/extensions/`, `~/.pi/age
 ```
 extensions/                  pi TypeScript extensions
   notify.ts                  OSC 777 desktop notification on turn end
+  titlebar-spinner.ts         Braille spinner animation in terminal title while agent works
   prompt-editor.ts            Mode system (named model+thinking presets) and cross-session prompt history
   review.ts                  /review workflow (uncommitted | branch | commit | pr | folder)
   uv.ts                      Force Python tooling through uv
