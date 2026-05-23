@@ -26,3 +26,10 @@ This repo stores pi extensions, skills, and prompts. Everything is symlinked int
 - `install.sh` globs each directory, so new files are picked up automatically. Just re-run it.
 - Never place files directly in the symlink targets (`~/.pi/agent/extensions/`, etc.). Always work in this repo.
 - Match existing code style and README formatting when adding entries.
+
+## Extension authoring lessons
+
+- Built-in tool factories (`createEditToolDefinition`, `withFileMutationQueue`, etc.) are public exports of `@earendil-works/pi-coding-agent`. Compose with them instead of vendoring BOM/line-ending/diff helpers, which are not exported.
+- An extension that calls `registerTool({ name: "edit" })` overrides the built-in.
+- `renderShell: "self"` plus `renderCall` / `renderResult` are available to extensions. Delegating to the built-in's renderers (after normalizing args back to the built-in shape) preserves the live TUI diff preview.
+- Pi loads extensions through jiti with package aliases set up in `core/extensions/loader.js`. A standalone smoke test will fail with `Cannot find module '@earendil-works/pi-coding-agent'` unless it runs from `~/.pi/agent/npm/` and replicates those aliases.
