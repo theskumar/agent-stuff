@@ -178,14 +178,14 @@ class SnakeComponent {
 			return;
 		}
 
-		// Arrow keys or WASD
-		if (matchesKey(data, "up") || data === "w" || data === "W") {
+		// Arrow keys, WASD, or vim hjkl
+		if (matchesKey(data, "up") || data === "w" || data === "W" || data === "k" || data === "K") {
 			if (this.state.direction !== "down") this.state.nextDirection = "up";
-		} else if (matchesKey(data, "down") || data === "s" || data === "S") {
+		} else if (matchesKey(data, "down") || data === "s" || data === "S" || data === "j" || data === "J") {
 			if (this.state.direction !== "up") this.state.nextDirection = "down";
-		} else if (matchesKey(data, "right") || data === "d" || data === "D") {
+		} else if (matchesKey(data, "right") || data === "d" || data === "D" || data === "l" || data === "L") {
 			if (this.state.direction !== "left") this.state.nextDirection = "right";
-		} else if (matchesKey(data, "left") || data === "a" || data === "A") {
+		} else if (matchesKey(data, "left") || data === "a" || data === "A" || data === "h" || data === "H") {
 			if (this.state.direction !== "right") this.state.nextDirection = "left";
 		}
 
@@ -275,7 +275,7 @@ class SnakeComponent {
 		} else if (this.state.gameOver) {
 			footer = `${red(bold("GAME OVER!"))} Press ${bold("R")} to restart, ${bold("Q")} to quit`;
 		} else {
-			footer = `↑↓←→ or WASD to move, ${bold("ESC")} pause, ${bold("Q")} quit`;
+			footer = `↑↓←→ / WASD / hjkl to move, ${bold("ESC")} pause, ${bold("Q")} quit`;
 		}
 		lines.push(this.padLine(boxLine(footer), width));
 
