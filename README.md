@@ -46,6 +46,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`commit`](skills/commit/) | Conventional Commit messages |
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
+| [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
 | [`native-web-search`](skills/native-web-search/) | Trigger native web search |
 | [`skill-creator`](skills/skill-creator/) | Create, edit, and eval skills |
@@ -69,5 +70,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`extensions/*.ts`](extensions/) | `~/.pi/agent/extensions/*.ts` |
 | [`prompts/*.md`](prompts/) | `~/.pi/agent/prompts/*.md` |
 | [`prompts/security-audit.md`](prompts/security-audit.md) | `~/.claude/commands/security/audit.md` |
+| Selected skills (CC_SKILLS) | `~/.claude/skills/*` |
+| Selected skills (PI_SKILLS) | `~/.pi/agent/skills/*` |
 
 See [`AGENTS.md`](AGENTS.md) for conventions when adding new items.
