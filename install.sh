@@ -50,5 +50,6 @@ done
 echo "==> Claude commands"
 # security/audit → reuse prompts/security-audit.md
 link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audit.md"
+link "$REPO_DIR/prompts/summarize-url.md" "$HOME/.claude/commands/summarize-url.md"
 
 echo "Done."
