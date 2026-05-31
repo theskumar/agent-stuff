@@ -49,6 +49,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
 | [`native-web-search`](skills/native-web-search/) | Trigger native web search |
+| [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`skill-creator`](skills/skill-creator/) | Create, edit, and eval skills |
 | [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
