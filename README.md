@@ -24,6 +24,9 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`snake.ts`](extensions/snake.ts) | `/snake` game |
 | [`uv.ts`](extensions/uv.ts) | Force Python tooling through `uv` |
 | [`files.ts`](extensions/files.ts) | File tool tweaks |
+| [`goal.ts`](extensions/goal.ts) | `/goal` long-running thread goal with token budget tracking |
+| [`answer.ts`](extensions/answer.ts) | `/answer` and `ctrl+.` extract questions from assistant messages into interactive Q&A TUI |
+| [`todos.ts`](extensions/todos.ts) | `/todos` visual todo manager backed by markdown files in `.pi/todos/` |
 
 ### PATH shims (activated by `uv.ts`)
 
