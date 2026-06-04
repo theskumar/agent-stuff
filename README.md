@@ -27,6 +27,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`goal.ts`](extensions/goal.ts) | `/goal` long-running thread goal with token budget tracking |
 | [`answer.ts`](extensions/answer.ts) | `/answer` and `ctrl+.` extract questions from assistant messages into interactive Q&A TUI |
 | [`todos.ts`](extensions/todos.ts) | `/todos` visual todo manager backed by markdown files in `.pi/todos/` |
+| [`remove-pi-docs.ts`](extensions/remove-pi-docs.ts) | Strips built-in Pi docs from system prompt; `/pi-docs <request>` re-enables for one turn |
 
 ### PATH shims (activated by `uv.ts`)
 
