@@ -42,7 +42,7 @@ for name in "${CC_SKILLS[@]}"; do
 done
 
 echo "==> Skills → ~/.pi/agent/skills/ (pi agent)"
-PI_SKILLS=(find-skills google-workspace librarian mermaid sentry)
+PI_SKILLS=(find-skills google-workspace librarian mermaid notion sentry)
 for name in "${PI_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.pi/agent/skills/$name"
 done
