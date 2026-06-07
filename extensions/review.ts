@@ -24,6 +24,15 @@
  * - If a REVIEW_GUIDELINES.md file exists in the same directory as .pi,
  *   its contents are appended to the review prompt.
  *
+ * Automatic review context (invisible, no command/flag/selector changes):
+ * - Targeted checklists for the changed file types are appended to the rubric
+ *   (e.g. null/thread-safety for Java, XSS/React for TS/JS). See REVIEW_RULES.
+ * - A changed-file manifest, and (when the change is small enough) the full diff,
+ *   are pre-embedded so the model spends fewer turns re-deriving them with git.
+ * - Large changes get a short "enumerate and risk-rank files first" planning nudge.
+ * - The review ends with a fenced `review-meta` JSON trailer that loop-fixing reads
+ *   for a deterministic blocking signal (falling back to prose heuristics if absent).
+ *
  * Note: PR review requires a clean working tree (no uncommitted changes to tracked files).
  */
 
@@ -60,6 +69,15 @@ const REVIEW_SETTINGS_TYPE = "review-settings";
 const REVIEW_LOOP_MAX_ITERATIONS = 10;
 const REVIEW_LOOP_START_TIMEOUT_MS = 15000;
 const REVIEW_LOOP_START_POLL_MS = 50;
+
+// Bounded diff pre-embedding (WI-3): only embed the full diff when the change is
+// small enough that it will not crowd the context window. Above these thresholds
+// we fall back to the manifest plus the model running git itself, exactly as before.
+const DIFF_EMBED_MAX_LINES = 1500;
+const DIFF_EMBED_MAX_BYTES = 100 * 1024;
+// Plan gate (WI-4): above this many changed lines, nudge the model to enumerate and
+// risk-rank the changed files before listing findings. Matches OCR's plan threshold.
+const REVIEW_PLAN_GATE_LINE_THRESHOLD = 50;
 
 type ReviewSessionState = {
   active: boolean;
@@ -348,7 +366,91 @@ function hasNeedsAttentionVerdict(messageText: string): boolean {
   return false;
 }
 
+type ReviewMeta = {
+  verdict?: unknown;
+  blocking?: unknown;
+  findings?: unknown;
+};
+
+/**
+ * Extract the machine-readable `review-meta` trailer the rubric asks the model to
+ * emit (WI-2). Returns the parsed object, or null when the block is absent or
+ * malformed.
+ *
+ * This is an optional convenience signal, not a contract: older sessions and other
+ * models won't emit it, and a model can still produce slightly malformed JSON. We
+ * deliberately swallow parse failures and return null so callers fall back to the
+ * legacy prose-scraping heuristics rather than failing the review. (This is a
+ * boundary-level "best effort" by design, the one place the strict fail-fast rule
+ * does not apply, because a clean fallback path exists.)
+ */
+function parseReviewMeta(messageText: string): ReviewMeta | null {
+  const fenceRe = /```review-meta\s*\r?\n([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  let lastBody: string | null = null;
+  while ((match = fenceRe.exec(messageText)) !== null) {
+    lastBody = match[1];
+  }
+  if (lastBody === null) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(lastBody.trim());
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as ReviewMeta;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decide whether the parsed meta indicates blocking findings.
+ * Returns null when the meta carries no usable verdict/blocking signal, so the
+ * caller can fall back to the legacy heuristics.
+ */
+function metaIndicatesBlocking(meta: ReviewMeta): boolean | null {
+  let known = false;
+  let blocking = false;
+
+  if (typeof meta.blocking === "number" && Number.isFinite(meta.blocking)) {
+    known = true;
+    if (meta.blocking > 0) {
+      blocking = true;
+    }
+  }
+
+  if (typeof meta.verdict === "string" && meta.verdict.trim()) {
+    known = true;
+    if (isNeedsAttentionVerdictValue(meta.verdict)) {
+      blocking = true;
+    }
+  }
+
+  return known ? blocking : null;
+}
+
+/**
+ * Whether the review reported blocking findings.
+ *
+ * Prefers the structured `review-meta` trailer (WI-2); falls back to the legacy
+ * markdown-scraping heuristics when the trailer is absent or carries no usable
+ * signal, so older sessions and non-conforming models keep working.
+ */
 function hasBlockingReviewFindings(messageText: string): boolean {
+  const meta = parseReviewMeta(messageText);
+  if (meta) {
+    const fromMeta = metaIndicatesBlocking(meta);
+    if (fromMeta !== null) {
+      return fromMeta;
+    }
+  }
+  return hasBlockingReviewFindingsLegacy(messageText);
+}
+
+function hasBlockingReviewFindingsLegacy(messageText: string): boolean {
   const lines = messageText.split(/\r?\n/);
   const bounds = getFindingsSectionBounds(lines);
   const candidateLines = bounds ? lines.slice(bounds.start, bounds.end) : lines;
@@ -519,7 +621,361 @@ Provide your findings in a clear, structured format:
 6. Do not generate a full PR fix — only flag issues and optionally provide short suggestion blocks.
 7. End with the required "Human Reviewer Callouts (Non-Blocking)" section and all applicable bold callouts (no yes/no).
 
-Output all findings the author would fix if they knew about them. If there are no qualifying findings, explicitly state the code looks good. Don't stop at the first finding - list every qualifying issue. Then append the required non-blocking callouts section.`;
+Output all findings the author would fix if they knew about them. If there are no qualifying findings, explicitly state the code looks good. Don't stop at the first finding - list every qualifying issue. Then append the required non-blocking callouts section.
+
+## Machine-readable trailer (required, very last)
+
+After the Human Reviewer Callouts section, append exactly one fenced code block labeled \`review-meta\` as the very last thing in your response. It must contain a single JSON object:
+
+\`\`\`review-meta
+{"verdict":"correct","blocking":0,"findings":[{"priority":"P2","file":"path/to/file.ext","line":42,"title":"short finding title"}]}
+\`\`\`
+
+Rules for this trailer:
+1. \`verdict\` is exactly "correct" or "needs attention" and must match the overall verdict you reported above.
+2. \`blocking\` is the integer count of blocking findings (P0, P1, or P2). Use 0 when the verdict is "correct".
+3. \`findings\` lists every finding you reported, including P3. Use \`[]\` when there are none. Use \`null\` for \`line\` when a single line does not apply.
+4. This block is metadata for tooling. Keep it accurate and consistent with the human-readable review above it; do not add commentary inside the block.`;
+
+// ---------------------------------------------------------------------------
+// WI-1: Language- and path-aware rule injection
+//
+// Targeted checklists appended to the generic rubric, scoped to the file types
+// actually changed. Embedded inline (rather than a sidecar JSON) because this
+// repo installs extensions as standalone symlinked `.ts` files (see install.sh),
+// so a `.json` data file would not be deployed alongside the extension.
+//
+// Checklists are seeded from and inspired by alibaba/open-code-review
+// (internal/config/rules/system_rules.json), which is licensed Apache-2.0.
+// ---------------------------------------------------------------------------
+type ReviewRule = {
+  id: string;
+  globs: string[];
+  checklist: string;
+};
+
+const REVIEW_RULES: ReviewRule[] = [
+  {
+    id: "java",
+    globs: ["**/*.java"],
+    checklist:
+      "### Java\n" +
+      "- Null-safety: guard against NullPointerException; check Optional usage, unboxing of nullable wrappers, and map/collection lookups.\n" +
+      "- Thread-safety: flag shared mutable state without synchronization, non-thread-safe types (SimpleDateFormat, HashMap) used concurrently, and double-checked locking without volatile.\n" +
+      "- Resource handling: ensure streams/connections use try-with-resources; flag resources that may leak on exception.\n" +
+      "- Exceptions: flag swallowed exceptions and overly broad catch (Exception/Throwable) without rethrow or context.",
+  },
+  {
+    id: "web-ts-js",
+    globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+    checklist:
+      "### TypeScript / JavaScript\n" +
+      "- XSS: flag `dangerouslySetInnerHTML`, `innerHTML`/`outerHTML` assignment, and `eval`/`new Function` on untrusted input; prefer escaping over sanitizing.\n" +
+      "- React norms: verify hook dependency arrays, stable `key` props in lists, and effects that need cleanup; avoid state updates after unmount.\n" +
+      "- Async: flag unhandled promise rejections and missing `await` on promises whose result/errors matter.\n" +
+      "- Equality/types: prefer `===`/`!==`; be wary of implicit `any` and unchecked non-null assertions (`!`).",
+  },
+  {
+    id: "python",
+    globs: ["**/*.py"],
+    checklist:
+      "### Python\n" +
+      "- Mutable default arguments (`def f(x=[])`) and shared module-level mutable state.\n" +
+      "- Broad `except:`/`except Exception:` that swallows errors; prefer specific exceptions and re-raise where recovery isn't possible.\n" +
+      "- SQL built via f-strings/`%`/`.format`; require parameterized queries.\n" +
+      "- `subprocess(..., shell=True)` or `os.system` with interpolated input.",
+  },
+  {
+    id: "c-cpp",
+    globs: ["**/*.c", "**/*.h", "**/*.cc", "**/*.cpp", "**/*.cxx", "**/*.hpp"],
+    checklist:
+      "### C / C++\n" +
+      "- malloc/calloc/realloc paired with exactly one free; flag leaks and double-free on every path (including error paths).\n" +
+      "- Check allocation results for NULL before use.\n" +
+      "- Buffer bounds: flag unbounded copies (strcpy/strcat/sprintf/gets) and off-by-one indexing.\n" +
+      "- Integer overflow in size/length arithmetic used for allocation or indexing.",
+  },
+  {
+    id: "go",
+    globs: ["**/*.go"],
+    checklist:
+      "### Go\n" +
+      "- Unchecked errors: every returned `error` should be handled or explicitly ignored with rationale.\n" +
+      "- Goroutine leaks: ensure goroutines can exit (context/cancellation, closed channels).\n" +
+      "- `defer` inside loops accumulating until function return.\n" +
+      "- Nil dereference of maps/pointers/interfaces before initialization.",
+  },
+  {
+    id: "sql-mapper-xml",
+    globs: ["**/*mapper*.xml", "**/*Mapper*.xml"],
+    checklist:
+      "### SQL mapper XML (MyBatis/iBatis)\n" +
+      "- SQL injection: flag `${...}` string substitution on user-controlled values; require `#{...}` parameter binding instead.\n" +
+      "- Dynamic SQL (`<if>`/`<foreach>`) that concatenates untrusted fragments.\n" +
+      "- Unparameterized `LIKE`, `ORDER BY`, or `IN` clauses built from input.",
+  },
+  {
+    id: "maven-pom",
+    globs: ["**/pom.xml"],
+    checklist:
+      "### Maven pom.xml\n" +
+      "- Dependency pinning: flag `-SNAPSHOT` dependencies and unbounded/open version ranges in release builds.\n" +
+      "- Unpinned plugin versions (rely on a fixed version, not the build's default).\n" +
+      "- New or changed dependencies that warrant a human callout.",
+  },
+  {
+    id: "npm-package-json",
+    globs: ["**/package.json"],
+    checklist:
+      "### package.json\n" +
+      "- Wildcard/loose version specifiers (`*`, `latest`, or broad `^`/`~` on security-sensitive deps).\n" +
+      "- New dependencies and dependency/lockfile churn (call out for human review).\n" +
+      "- `scripts` (especially `preinstall`/`postinstall`) that run network or arbitrary shell commands.",
+  },
+];
+
+const GLOB_REGEX_CACHE = new Map<string, RegExp>();
+
+function escapeRegExpLiteral(ch: string): string {
+  return ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Compile a small subset of glob syntax (`**`, `*`, `?`) to a RegExp anchored to
+ * the whole path. `**​/` matches zero or more leading path segments so that, e.g.,
+ * `**​/pom.xml` matches both `pom.xml` and `a/b/pom.xml`.
+ */
+function globToRegExp(glob: string): RegExp {
+  const cached = GLOB_REGEX_CACHE.get(glob);
+  if (cached) {
+    return cached;
+  }
+
+  let re = "";
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        if (glob[i + 2] === "/") {
+          re += "(?:.*/)?";
+          i += 2;
+        } else {
+          re += ".*";
+          i += 1;
+        }
+      } else {
+        re += "[^/]*";
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else {
+      re += escapeRegExpLiteral(c);
+    }
+  }
+
+  const compiled = new RegExp(`^${re}$`);
+  GLOB_REGEX_CACHE.set(glob, compiled);
+  return compiled;
+}
+
+function normalizeReviewPath(p: string): string {
+  return p.trim().replace(/^\.\//, "").replace(/^\/+/, "");
+}
+
+/**
+ * Concatenate the checklists of every rule whose glob matches at least one of the
+ * changed files. De-duplicated by rule id and stable in rule order. Returns an
+ * empty string when nothing matches (so the prompt is unchanged from today).
+ */
+function selectRulesForChangedFiles(changedFiles: string[]): string {
+  if (changedFiles.length === 0) {
+    return "";
+  }
+
+  const paths = changedFiles
+    .map(normalizeReviewPath)
+    .filter((p) => p.length > 0);
+  if (paths.length === 0) {
+    return "";
+  }
+
+  const blocks: string[] = [];
+  for (const rule of REVIEW_RULES) {
+    const matched = rule.globs.some((glob) => {
+      const re = globToRegExp(glob);
+      return paths.some((p) => re.test(p));
+    });
+    if (matched) {
+      blocks.push(rule.checklist);
+    }
+  }
+
+  return blocks.join("\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// WI-3: Bounded diff pre-embedding + shared changed-file resolution (also feeds WI-1)
+// ---------------------------------------------------------------------------
+type DiffContext = {
+  changedFiles: string[];
+  // name-status listing plus a shortstat summary. Always set when resolvable.
+  manifest?: string;
+  // Full unified diff, only when the change is under the embed thresholds.
+  diff?: string;
+  // Changed line count (insertions + deletions) when known, else 0.
+  lineCount: number;
+};
+
+function splitGitLines(stdout: string): string[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+/**
+ * Parse `git status --porcelain` output into the set of affected paths, including
+ * untracked files and the destination side of renames.
+ */
+function parsePorcelainPaths(stdout: string): string[] {
+  const files: string[] = [];
+  for (const rawLine of stdout.split("\n")) {
+    if (!rawLine.trim()) {
+      continue;
+    }
+    // Porcelain v1: 2 status chars, a space, then the path (or "old -> new").
+    let p = rawLine.slice(3);
+    const arrow = p.indexOf(" -> ");
+    if (arrow >= 0) {
+      p = p.slice(arrow + 4);
+    }
+    p = p.trim();
+    if (p.startsWith('"') && p.endsWith('"')) {
+      p = p.slice(1, -1);
+    }
+    if (p) {
+      files.push(p);
+    }
+  }
+  return files;
+}
+
+function parseShortstatLineCount(shortstat: string): number {
+  const insertions = shortstat.match(/(\d+)\s+insertion/);
+  const deletions = shortstat.match(/(\d+)\s+deletion/);
+  const ins = insertions ? parseInt(insertions[1], 10) : 0;
+  const del = deletions ? parseInt(deletions[1], 10) : 0;
+  return (Number.isFinite(ins) ? ins : 0) + (Number.isFinite(del) ? del : 0);
+}
+
+async function getChangedFilesForTarget(
+  pi: ExtensionAPI,
+  target: ReviewTarget,
+  mergeBase: string | null,
+): Promise<string[]> {
+  switch (target.type) {
+    case "folder":
+      return [...target.paths];
+    case "uncommitted": {
+      const { stdout, code } = await pi.exec("git", ["status", "--porcelain"]);
+      if (code !== 0) return [];
+      return parsePorcelainPaths(stdout);
+    }
+    case "commit": {
+      const { stdout, code } = await pi.exec("git", [
+        "show",
+        "--name-only",
+        "--format=",
+        target.sha,
+      ]);
+      if (code !== 0) return [];
+      return splitGitLines(stdout);
+    }
+    case "baseBranch":
+    case "pullRequest": {
+      if (!mergeBase) return [];
+      const { stdout, code } = await pi.exec("git", [
+        "diff",
+        "--name-only",
+        mergeBase,
+      ]);
+      if (code !== 0) return [];
+      return splitGitLines(stdout);
+    }
+  }
+}
+
+/**
+ * Resolve the changed-file list and, when the change is small enough, the full
+ * diff for the given target. Best-effort: on any git failure (or for folder
+ * snapshot reviews) the relevant fields are simply omitted so the review degrades
+ * to today's behavior. `mergeBase` is the value already computed by the caller for
+ * branch/PR targets, avoiding a duplicate `git merge-base`.
+ */
+async function collectDiffContext(
+  pi: ExtensionAPI,
+  target: ReviewTarget,
+  mergeBase: string | null,
+): Promise<DiffContext> {
+  const changedFiles = await getChangedFilesForTarget(pi, target, mergeBase);
+
+  // Folder review is a snapshot, not a diff: no manifest/diff to embed.
+  if (target.type === "folder") {
+    return { changedFiles, lineCount: 0 };
+  }
+
+  let nameStatusArgs: string[];
+  let shortstatArgs: string[];
+  let diffArgs: string[];
+
+  switch (target.type) {
+    case "uncommitted":
+      nameStatusArgs = ["diff", "HEAD", "--name-status"];
+      shortstatArgs = ["diff", "HEAD", "--shortstat"];
+      diffArgs = ["diff", "HEAD"];
+      break;
+    case "commit":
+      nameStatusArgs = ["show", "--name-status", "--format=", target.sha];
+      shortstatArgs = ["show", "--shortstat", "--format=", target.sha];
+      diffArgs = ["show", "--format=", target.sha];
+      break;
+    case "baseBranch":
+    case "pullRequest":
+      if (!mergeBase) {
+        return { changedFiles, lineCount: 0 };
+      }
+      nameStatusArgs = ["diff", "--name-status", mergeBase];
+      shortstatArgs = ["diff", "--shortstat", mergeBase];
+      diffArgs = ["diff", mergeBase];
+      break;
+  }
+
+  const nameStatus = await pi.exec("git", nameStatusArgs);
+  const shortstat = await pi.exec("git", shortstatArgs);
+  const lineCount =
+    shortstat.code === 0 ? parseShortstatLineCount(shortstat.stdout) : 0;
+
+  let manifest: string | undefined;
+  const nsBody = nameStatus.code === 0 ? nameStatus.stdout.trim() : "";
+  if (nsBody) {
+    const summary = shortstat.code === 0 ? shortstat.stdout.trim() : "";
+    manifest = summary ? `${nsBody}\n\n${summary}` : nsBody;
+  }
+
+  let diff: string | undefined;
+  if (lineCount > 0 && lineCount <= DIFF_EMBED_MAX_LINES) {
+    const full = await pi.exec("git", diffArgs);
+    if (
+      full.code === 0 &&
+      full.stdout.trim() &&
+      Buffer.byteLength(full.stdout, "utf8") <= DIFF_EMBED_MAX_BYTES
+    ) {
+      diff = full.stdout;
+    }
+  }
+
+  return { changedFiles, manifest, diff, lineCount };
+}
 
 async function loadProjectReviewGuidelines(
   cwd: string,
@@ -770,43 +1226,86 @@ async function getDefaultBranch(pi: ExtensionAPI): Promise<string> {
 }
 
 /**
- * Build the review prompt based on target
+ * Append the changed-file manifest and (when available) the pre-embedded diff to a
+ * base focus prompt (WI-3). When no diff context is available the base prompt is
+ * returned unchanged, matching today's behavior.
+ */
+function appendDiffContext(base: string, diffContext?: DiffContext): string {
+  if (!diffContext) {
+    return base;
+  }
+
+  let out = base;
+  if (diffContext.manifest) {
+    out += `\n\nChanged files in scope:\n\n${diffContext.manifest}`;
+  }
+  if (diffContext.diff) {
+    out +=
+      "\n\nThe full diff for this review is included below. You may rely on it" +
+      " directly instead of re-running git to fetch the diff (still read" +
+      " surrounding code with the file tools as needed):\n\n```diff\n" +
+      diffContext.diff +
+      "\n```";
+  }
+  return out;
+}
+
+/**
+ * Build the review prompt based on target.
+ *
+ * `options.mergeBase` lets the caller pass a merge base it already computed for
+ * branch/PR targets (avoiding a duplicate `git merge-base`). When omitted
+ * (`undefined`) it is computed here as before; a passed `null` means "computed and
+ * none found" and selects the fallback prompt.
  */
 async function buildReviewPrompt(
   pi: ExtensionAPI,
   target: ReviewTarget,
-  options?: { includeLocalChanges?: boolean },
+  options?: {
+    includeLocalChanges?: boolean;
+    mergeBase?: string | null;
+    diffContext?: DiffContext;
+  },
 ): Promise<string> {
   const includeLocalChanges = options?.includeLocalChanges === true;
+  const diffContext = options?.diffContext;
 
   switch (target.type) {
     case "uncommitted":
-      return UNCOMMITTED_PROMPT;
+      return appendDiffContext(UNCOMMITTED_PROMPT, diffContext);
 
     case "baseBranch": {
-      const mergeBase = await getMergeBase(pi, target.branch);
+      const mergeBase =
+        options?.mergeBase !== undefined
+          ? options.mergeBase
+          : await getMergeBase(pi, target.branch);
       const basePrompt = mergeBase
         ? BASE_BRANCH_PROMPT_WITH_MERGE_BASE.replace(
             /{baseBranch}/g,
             target.branch,
           ).replace(/{mergeBaseSha}/g, mergeBase)
         : BASE_BRANCH_PROMPT_FALLBACK.replace(/{branch}/g, target.branch);
-      return includeLocalChanges
+      const withLocal = includeLocalChanges
         ? `${basePrompt} ${LOCAL_CHANGES_REVIEW_INSTRUCTIONS}`
         : basePrompt;
+      return appendDiffContext(withLocal, diffContext);
     }
 
-    case "commit":
-      if (target.title) {
-        return COMMIT_PROMPT_WITH_TITLE.replace("{sha}", target.sha).replace(
-          "{title}",
-          target.title,
-        );
-      }
-      return COMMIT_PROMPT.replace("{sha}", target.sha);
+    case "commit": {
+      const basePrompt = target.title
+        ? COMMIT_PROMPT_WITH_TITLE.replace("{sha}", target.sha).replace(
+            "{title}",
+            target.title,
+          )
+        : COMMIT_PROMPT.replace("{sha}", target.sha);
+      return appendDiffContext(basePrompt, diffContext);
+    }
 
     case "pullRequest": {
-      const mergeBase = await getMergeBase(pi, target.baseBranch);
+      const mergeBase =
+        options?.mergeBase !== undefined
+          ? options.mergeBase
+          : await getMergeBase(pi, target.baseBranch);
       const basePrompt = mergeBase
         ? PULL_REQUEST_PROMPT.replace(/{prNumber}/g, String(target.prNumber))
             .replace(/{title}/g, target.title)
@@ -818,12 +1317,14 @@ async function buildReviewPrompt(
           )
             .replace(/{title}/g, target.title)
             .replace(/{baseBranch}/g, target.baseBranch);
-      return includeLocalChanges
+      const withLocal = includeLocalChanges
         ? `${basePrompt} ${LOCAL_CHANGES_REVIEW_INSTRUCTIONS}`
         : basePrompt;
+      return appendDiffContext(withLocal, diffContext);
     }
 
     case "folder":
+      // Snapshot review: no diff context is gathered for folders.
       return FOLDER_REVIEW_PROMPT.replace("{paths}", target.paths.join(", "));
   }
 }
@@ -1642,14 +2143,44 @@ export default function reviewExtension(pi: ExtensionAPI) {
       });
     }
 
+    // Gather diff/rule context once (best-effort; degrades to prior behavior on
+    // any git failure). The merge base is computed here for branch/PR targets and
+    // reused by both the diff context and the prompt builder (no duplicate work).
+    let mergeBase: string | null | undefined;
+    if (target.type === "baseBranch") {
+      mergeBase = await getMergeBase(pi, target.branch);
+    } else if (target.type === "pullRequest") {
+      mergeBase = await getMergeBase(pi, target.baseBranch);
+    }
+
+    const diffContext = await collectDiffContext(pi, target, mergeBase ?? null);
+    const rulesBlock = selectRulesForChangedFiles(diffContext.changedFiles);
+
     const prompt = await buildReviewPrompt(pi, target, {
       includeLocalChanges: options?.includeLocalChanges === true,
+      mergeBase,
+      diffContext,
     });
     const hint = getUserFacingHint(target);
     const projectGuidelines = await loadProjectReviewGuidelines(ctx.cwd);
 
-    // Combine the review rubric with the specific prompt
-    let fullPrompt = `${REVIEW_RUBRIC}\n\n---\n\nPlease perform a code review with the following focus:\n\n${prompt}`;
+    // Combine the review rubric with the specific prompt.
+    let fullPrompt = REVIEW_RUBRIC;
+
+    // WI-1: targeted checklists for the changed file types, after the rubric and
+    // before the focus/guidelines. Inserted only when something matched.
+    if (rulesBlock) {
+      fullPrompt += `\n\n---\n\nThe changed files match these targeted checklists. Apply them in addition to the general guidelines above:\n\n${rulesBlock}`;
+    }
+
+    fullPrompt += `\n\n---\n\nPlease perform a code review with the following focus:\n\n${prompt}`;
+
+    // WI-4: plan gate for large changes. A short planning nudge, still within the
+    // single Pi turn. Small diffs (and reviews where the line count is unknown)
+    // are unaffected.
+    if (diffContext.lineCount > REVIEW_PLAN_GATE_LINE_THRESHOLD) {
+      fullPrompt += `\n\nThis is a large change (~${diffContext.lineCount} changed lines). Before listing findings, briefly enumerate the changed files and rank them by risk (highest first), then review them in that order. Keep this plan to a few lines.`;
+    }
 
     if (reviewCustomInstructions) {
       fullPrompt += `\n\nShared custom review instructions (applies to all reviews):\n\n${reviewCustomInstructions}`;
