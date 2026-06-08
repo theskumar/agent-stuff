@@ -10,6 +10,10 @@
  * 4. Submits the compiled answers when done
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
 import { complete, type Model, type Api, type UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader } from "@earendil-works/pi-coding-agent";
@@ -67,35 +71,70 @@ Example output:
   ]
 }`;
 
-const CODEX_MODEL_ID = "gpt-5.3";
-const HAIKU_MODEL_ID = "claude-haiku-4-5";
+interface AnswerConfig {
+	provider: string;
+	model: string;
+}
+
+const CONFIG_PATH = join(homedir(), ".pi", "agent", "extensions", "answer.config.json");
+const DEFAULT_CONFIG: AnswerConfig = {
+	provider: "claude-bridge",
+	model: "claude-haiku-4-5",
+};
 
 /**
- * Prefer GPT-5.3 for extraction when available, otherwise fallback to haiku or the current model.
+ * Load the fast-extraction model config from disk.
+ * Writes the default config on first run.
  */
-async function selectExtractionModel(
+function loadConfig(): AnswerConfig {
+	try {
+		if (existsSync(CONFIG_PATH)) {
+			const raw = readFileSync(CONFIG_PATH, "utf8");
+			const parsed = JSON.parse(raw) as Partial<AnswerConfig>;
+			return {
+				provider: parsed.provider || DEFAULT_CONFIG.provider,
+				model: parsed.model || DEFAULT_CONFIG.model,
+			};
+		}
+	} catch {
+		// fall through and write defaults
+	}
+	try {
+		mkdirSync(dirname(CONFIG_PATH), { recursive: true });
+		writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n", "utf8");
+	} catch {
+		// best-effort; in-memory default still works
+	}
+	return { ...DEFAULT_CONFIG };
+}
+
+/**
+ * Resolve the extraction model from config. Returns the model on success, or an
+ * error string describing why it couldn't be used (so the caller can surface it
+ * instead of silently showing "Cancelled").
+ */
+async function resolveExtractionModel(
 	currentModel: Model<Api>,
 	modelRegistry: ModelRegistry,
-): Promise<Model<Api>> {
-	const codexModel = modelRegistry.find("openai-codex", CODEX_MODEL_ID);
-	if (codexModel) {
-		const auth = await modelRegistry.getApiKeyAndHeaders(codexModel);
-		if (auth.ok) {
-			return codexModel;
-		}
+): Promise<{ ok: true; model: Model<Api>; usedFallback: boolean; configured: AnswerConfig } | { ok: false; error: string; configured: AnswerConfig }> {
+	const cfg = loadConfig();
+	const found = modelRegistry.find(cfg.provider, cfg.model);
+	if (!found) {
+		return {
+			ok: false,
+			error: `configured model ${cfg.provider}/${cfg.model} not found in registry. Edit ${CONFIG_PATH} or install the provider.`,
+			configured: cfg,
+		};
 	}
-
-	const haikuModel = modelRegistry.find("anthropic", HAIKU_MODEL_ID);
-	if (!haikuModel) {
-		return currentModel;
-	}
-
-	const auth = await modelRegistry.getApiKeyAndHeaders(haikuModel);
+	const auth = await modelRegistry.getApiKeyAndHeaders(found);
 	if (auth.ok === false) {
-		return currentModel;
+		return {
+			ok: false,
+			error: `auth failed for ${cfg.provider}/${cfg.model}: ${auth.error}. Edit ${CONFIG_PATH} or fix provider auth.`,
+			configured: cfg,
+		};
 	}
-
-	return haikuModel;
+	return { ok: true, model: found, usedFallback: false, configured: cfg };
 }
 
 /**
@@ -447,22 +486,41 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			// Select the best model for extraction (prefer GPT-5.3, then haiku)
-			const extractionModel = await selectExtractionModel(ctx.model, ctx.modelRegistry);
+			// Resolve extraction model from config (default: claude-bridge / claude-haiku-4-5)
+			const resolved = await resolveExtractionModel(ctx.model, ctx.modelRegistry);
+			if (!resolved.ok) {
+				ctx.ui.notify(`answer: ${resolved.error}`, "error");
+				return;
+			}
+			const extractionModel = resolved.model;
 
-			// Run extraction with loader UI
-			const extractionResult = await ctx.ui.custom<ExtractionResult | null>((tui, theme, _kb, done) => {
+			// Run extraction with loader UI. Surface real errors instead of silent "Cancelled".
+			type ExtractionOutcome =
+				| { kind: "ok"; result: ExtractionResult }
+				| { kind: "empty" }
+				| { kind: "aborted" }
+				| { kind: "parse-failed"; raw: string }
+				| { kind: "error"; message: string };
+
+			const outcome = await ctx.ui.custom<ExtractionOutcome>((tui, theme, _kb, done) => {
 				const loader = new BorderedLoader(tui, theme, `Extracting questions using ${extractionModel.id}...`);
-				loader.onAbort = () => done(null);
+				loader.onAbort = () => done({ kind: "aborted" });
 
-				const doExtract = async () => {
+				const doExtract = async (): Promise<ExtractionOutcome> => {
 					const auth = await ctx.modelRegistry.getApiKeyAndHeaders(extractionModel);
 					if (auth.ok === false) {
-						throw new Error(auth.error);
+						return { kind: "error", message: auth.error };
 					}
+					// Inline the extraction instructions into the user message. Some
+					// providers (notably claude-bridge, which uses the Claude Code preset)
+					// ignore the systemPrompt parameter, so we cannot rely on it alone.
+					const userText =
+						`${SYSTEM_PROMPT}\n\n` +
+						`---\n\nText to extract questions from:\n\n${lastAssistantText!}\n\n` +
+						`Respond with the JSON object only. Do not answer the questions yourself.`;
 					const userMessage: UserMessage = {
 						role: "user",
-						content: [{ type: "text", text: lastAssistantText! }],
+						content: [{ type: "text", text: userText }],
 						timestamp: Date.now(),
 					};
 
@@ -473,7 +531,7 @@ export default function (pi: ExtensionAPI) {
 					);
 
 					if (response.stopReason === "aborted") {
-						return null;
+						return { kind: "aborted" };
 					}
 
 					const responseText = response.content
@@ -481,25 +539,44 @@ export default function (pi: ExtensionAPI) {
 						.map((c) => c.text)
 						.join("\n");
 
-					return parseExtractionResult(responseText);
+					const parsed = parseExtractionResult(responseText);
+					if (!parsed) {
+						return { kind: "parse-failed", raw: responseText };
+					}
+					if (parsed.questions.length === 0) {
+						return { kind: "empty" };
+					}
+					return { kind: "ok", result: parsed };
 				};
 
 				doExtract()
 					.then(done)
-					.catch(() => done(null));
+					.catch((err: unknown) => {
+						const message = err instanceof Error ? err.message : String(err);
+						done({ kind: "error", message });
+					});
 
 				return loader;
 			});
 
-			if (extractionResult === null) {
+			if (outcome.kind === "aborted") {
 				ctx.ui.notify("Cancelled", "info");
 				return;
 			}
-
-			if (extractionResult.questions.length === 0) {
+			if (outcome.kind === "error") {
+				ctx.ui.notify(`answer: extraction failed (${extractionModel.api}/${extractionModel.id}): ${outcome.message}`, "error");
+				return;
+			}
+			if (outcome.kind === "parse-failed") {
+				const preview = outcome.raw.replace(/\s+/g, " ").slice(0, 120);
+				ctx.ui.notify(`answer: could not parse JSON from ${extractionModel.id}. Got: ${preview}`, "error");
+				return;
+			}
+			if (outcome.kind === "empty") {
 				ctx.ui.notify("No questions found in the last message", "info");
 				return;
 			}
+			const extractionResult = outcome.result;
 
 			// Show the Q&A component
 			const answersResult = await ctx.ui.custom<string | null>((tui, _theme, _kb, done) => {
