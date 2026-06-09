@@ -53,6 +53,7 @@ import {
 } from "@earendil-works/pi-tui";
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { Buffer } from "node:buffer";
 
 // State to track fresh session review (where we branched from).
 // Module-level state means only one review can be active at a time.
@@ -423,9 +424,15 @@ function metaIndicatesBlocking(meta: ReviewMeta): boolean | null {
   }
 
   if (typeof meta.verdict === "string" && meta.verdict.trim()) {
-    known = true;
+    // Only accept the two verdict values the rubric defines. Anything else
+    // (e.g. "looks good") is not a usable signal: treating it as known would
+    // suppress the legacy prose heuristics even when the prose has [P0-P2]
+    // findings.
     if (isNeedsAttentionVerdictValue(meta.verdict)) {
+      known = true;
       blocking = true;
+    } else if (/^correct$/i.test(normalizeVerdictValue(meta.verdict))) {
+      known = true;
     }
   }
 
@@ -628,7 +635,7 @@ Output all findings the author would fix if they knew about them. If there are n
 After the Human Reviewer Callouts section, append exactly one fenced code block labeled \`review-meta\` as the very last thing in your response. It must contain a single JSON object:
 
 \`\`\`review-meta
-{"verdict":"correct","blocking":0,"findings":[{"priority":"P2","file":"path/to/file.ext","line":42,"title":"short finding title"}]}
+{"verdict":"correct","blocking":0,"findings":[{"priority":"P3","file":"path/to/file.ext","line":42,"title":"short finding title"}]}
 \`\`\`
 
 Rules for this trailer:
@@ -671,9 +678,15 @@ const REVIEW_RULES: ReviewRule[] = [
     checklist:
       "### TypeScript / JavaScript\n" +
       "- XSS: flag `dangerouslySetInnerHTML`, `innerHTML`/`outerHTML` assignment, and `eval`/`new Function` on untrusted input; prefer escaping over sanitizing.\n" +
-      "- React norms: verify hook dependency arrays, stable `key` props in lists, and effects that need cleanup; avoid state updates after unmount.\n" +
       "- Async: flag unhandled promise rejections and missing `await` on promises whose result/errors matter.\n" +
       "- Equality/types: prefer `===`/`!==`; be wary of implicit `any` and unchecked non-null assertions (`!`).",
+  },
+  {
+    id: "react",
+    globs: ["**/*.tsx", "**/*.jsx"],
+    checklist:
+      "### React\n" +
+      "- Verify hook dependency arrays, stable `key` props in lists, and effects that need cleanup; avoid state updates after unmount.",
   },
   {
     id: "python",
@@ -950,13 +963,32 @@ async function collectDiffContext(
       break;
   }
 
-  const nameStatus = await pi.exec("git", nameStatusArgs);
-  const shortstat = await pi.exec("git", shortstatArgs);
+  const [nameStatus, shortstat, untracked] = await Promise.all([
+    pi.exec("git", nameStatusArgs),
+    pi.exec("git", shortstatArgs),
+    target.type === "uncommitted"
+      ? pi.exec("git", ["ls-files", "--others", "--exclude-standard"])
+      : Promise.resolve(null),
+  ]);
   const lineCount =
     shortstat.code === 0 ? parseShortstatLineCount(shortstat.stdout) : 0;
 
+  let nsBody = nameStatus.code === 0 ? nameStatus.stdout.trim() : "";
+
+  // `git diff HEAD` does not cover untracked files, so list them explicitly:
+  // otherwise the embedded diff (presented as "the full diff") would steer the
+  // model away from ever reading newly added files.
+  if (untracked && untracked.code === 0) {
+    const untrackedFiles = splitGitLines(untracked.stdout);
+    if (untrackedFiles.length > 0) {
+      const block =
+        "Untracked (new) files — not included in any embedded diff; read them with the file tools:\n" +
+        untrackedFiles.map((f) => `A\t${f}`).join("\n");
+      nsBody = nsBody ? `${nsBody}\n\n${block}` : block;
+    }
+  }
+
   let manifest: string | undefined;
-  const nsBody = nameStatus.code === 0 ? nameStatus.stdout.trim() : "";
   if (nsBody) {
     const summary = shortstat.code === 0 ? shortstat.stdout.trim() : "";
     manifest = summary ? `${nsBody}\n\n${summary}` : nsBody;
@@ -1240,14 +1272,35 @@ function appendDiffContext(base: string, diffContext?: DiffContext): string {
     out += `\n\nChanged files in scope:\n\n${diffContext.manifest}`;
   }
   if (diffContext.diff) {
+    // Diffs can themselves contain fence lines (markdown changes, or template
+    // literals with backticks); use a fence longer than any backtick run in the
+    // diff so it cannot be closed early.
+    const fence = makeFenceFor(diffContext.diff);
     out +=
       "\n\nThe full diff for this review is included below. You may rely on it" +
       " directly instead of re-running git to fetch the diff (still read" +
-      " surrounding code with the file tools as needed):\n\n```diff\n" +
+      ` surrounding code with the file tools as needed):\n\n${fence}diff\n` +
       diffContext.diff +
-      "\n```";
+      `\n${fence}`;
   }
   return out;
+}
+
+/**
+ * Return a backtick fence at least one longer than the longest backtick run in
+ * `content` (minimum the standard three), so the fenced block cannot be closed
+ * early by fence-like lines inside the content.
+ */
+function makeFenceFor(content: string): string {
+  let longestRun = 0;
+  const runRe = /`+/g;
+  let match: RegExpExecArray | null;
+  while ((match = runRe.exec(content)) !== null) {
+    if (match[0].length > longestRun) {
+      longestRun = match[0].length;
+    }
+  }
+  return "`".repeat(Math.max(3, longestRun + 1));
 }
 
 /**
