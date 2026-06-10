@@ -28,8 +28,8 @@ Create a git commit for the current changes using a concise Conventional Commits
 ## Steps
 
 1. Infer from the prompt if the user provided specific file paths/globs and/or additional instructions.
-2. Review `git status` and `git diff` to understand the current changes (limit to argument-specified files if provided).
-3. (Optional) Run `git log -n 50 --pretty=format:%s` to see commonly used scopes.
+2. Review `git status` and `git diff` to understand the current changes (limit to argument-specified files if provided). When invoked via pi's `/commit` prompt with the `inline-bash` extension, the digest is already embedded in the user message; reuse it instead of re-running these commands unless it is empty, truncated (look for a 60KB cap marker), or contradicts the request.
+3. (Optional) Run `git log -n 50 --pretty=format:%s` to see commonly used scopes. Skip if the digest already includes recent subjects.
 4. If there are ambiguous extra files, ask the user for clarification before committing.
 5. Stage only the intended files (all changes if no files specified).
 6. Run `git commit -m "<subject>"` (and `-m "<body>"` if needed).
