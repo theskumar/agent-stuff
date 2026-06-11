@@ -50,6 +50,20 @@ done
 echo "==> Claude commands"
 # security/audit → reuse prompts/security-audit.md
 link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audit.md"
-link "$REPO_DIR/prompts/summarize-url.md" "$HOME/.claude/commands/summarize-url.md"
+# Prompts portable to Claude Code (filename becomes the slash command).
+# Excluded: commit.md (uses pi-specific !{cmd} inline-bash syntax).
+CC_PROMPTS=(
+  summarize-url
+  go
+  create_a_skill
+  create_idea_compass
+  create_micro_summary
+  create_user_story
+  extract_wisdom
+  humanize
+)
+for name in "${CC_PROMPTS[@]}"; do
+  link "$REPO_DIR/prompts/$name.md" "$HOME/.claude/commands/$name.md"
+done
 
 echo "Done."
