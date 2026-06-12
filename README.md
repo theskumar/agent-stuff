@@ -19,6 +19,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
 | [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
 | [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history |
+| [`tree-fast-summary.ts`](extensions/tree-fast-summary.ts) | Route `/tree` branch summarization through the `fast` mode in `modes.json` (project then global) instead of the main model, with a hard-coded fallback |
 | [`titlebar-spinner.ts`](extensions/titlebar-spinner.ts) | Braille spinner in terminal title while agent works |
 | [`notify.ts`](extensions/notify.ts) | OSC 777 desktop notification on turn end |
 | [`snake.ts`](extensions/snake.ts) | `/snake` game |
