@@ -32,6 +32,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [prompt]` forks the current session into a new pi process in a right-hand tmux split (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux) |
+| [`split-tree.ts`](extensions/split-tree.ts) | `/split-tree [prompt]` pick a point in the session tree, fork from there, and open it in a right-hand tmux split |
 
 ### PATH shims (activated by `uv.ts`)
 
@@ -58,6 +59,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
 | [`native-web-search`](skills/native-web-search/) | Trigger native web search |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
+| [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
@@ -70,6 +72,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 
 | Prompt | Purpose |
 |---|---|
+| [`amazon-search.md`](prompts/amazon-search.md) | Search Amazon products, extract listings/reviews via DOM, recommend by requirements |
 | [`create_a_skill.md`](prompts/create_a_skill.md) | Create new agent skills with proper structure and bundled resources |
 | [`create_idea_compass.md`](prompts/create_idea_compass.md) | Organize and structure ideas by exploring definition, evidence, and related themes |
 | [`create_micro_summary.md`](prompts/create_micro_summary.md) | Generate concise micro summaries of content |

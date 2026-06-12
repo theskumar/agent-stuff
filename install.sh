@@ -36,7 +36,7 @@ done
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github librarian uv summarize mermaid sentry)
+CC_SKILLS=(commit github librarian uv summarize mermaid sentry notion pr-summary)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
@@ -53,6 +53,7 @@ link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audi
 # Prompts portable to Claude Code (filename becomes the slash command).
 # Excluded: commit.md (uses pi-specific !{cmd} inline-bash syntax).
 CC_PROMPTS=(
+  amazon-search
   summarize-url
   go
   create_a_skill
