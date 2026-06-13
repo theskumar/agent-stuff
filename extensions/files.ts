@@ -1,9 +1,26 @@
 /**
  * Files Extension
  *
- * /files command lists files in the current git tree (plus session-referenced files)
- * and offers quick actions like reveal, open, edit, or diff.
- * /diff is kept as an alias to the same picker.
+ * What it is:
+ *   A `/files` (and `/diff` alias) picker that lists every file in the
+ *   current git tree, plus any files referenced earlier in the session, and
+ *   offers quick per-file actions: reveal in finder, open in `$EDITOR`, edit
+ *   the file in pi, or view the diff against HEAD. Helpful for navigating
+ *   into a file without typing a path or for quickly inspecting what the
+ *   agent has touched.
+ *
+ * Use cases:
+ *   - "Show me the diff for the file I just edited" without remembering its
+ *     full path.
+ *   - Opening a file in your external editor straight from pi.
+ *   - Picking the right path when starting a new edit instruction.
+ *   - Auditing which files the current session has read or written.
+ *
+ * Common usage patterns:
+ *   - `/files` — open the picker; type to fuzzy-filter, Enter to pick.
+ *   - `/diff` — alias of `/files`, scoped at "show diff" mentally.
+ *   - From the picker, choose reveal / open / edit / diff for the highlighted
+ *     file.
  */
 
 import { spawnSync } from "node:child_process";
