@@ -1,11 +1,27 @@
 /**
  * Titlebar Spinner Extension
  *
- * Shows a braille spinner animation in the terminal title while the agent is working.
- * Uses `ctx.ui.setTitle()` to update the terminal title via the extension API.
+ * What it is:
+ *   While an agent turn is in flight, animates a braille spinner in the
+ *   terminal's window title (via `ctx.ui.setTitle()`). On idle the title
+ *   resets to `π - <session> - <cwd>` so you can read it at a glance from
+ *   the OS window list.
  *
- * Usage:
- *   pi --extension examples/extensions/titlebar-spinner.ts
+ *   No chat/UI surface — purely a title-bar affordance.
+ *
+ * Use cases:
+ *   - Quickly tell which terminal tab/window is actively working when you
+ *     have several pi sessions open.
+ *   - Spot at a glance (in the OS taskbar / `cmd-tab` / tmux window list)
+ *     when a long turn finishes.
+ *   - Helpful companion to `notify.ts` when notifications are noisy or
+ *     unsupported in your terminal.
+ *
+ * Common usage patterns:
+ *   - Install and forget; spinner starts/stops with `agent_start` /
+ *     `agent_end`.
+ *   - Works in any terminal that respects the OSC window-title escape
+ *     sequence (essentially all of them).
  */
 
 import path from "node:path";
