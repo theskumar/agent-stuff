@@ -1,7 +1,40 @@
 /**
- * This extension stores todo items as files under <todo-dir> (defaults to .pi/todos,
- * or the path in PI_TODO_PATH).  Each todo is a standalone markdown file named
- * <id>.md and an optional <id>.lock file is used while a session is editing it.
+ * Todos Extension
+ *
+ * What it is:
+ *   A markdown-backed todo manager for pi sessions. Todos live as individual
+ *   `<id>.md` files under `.pi/todos/` (or the path in `PI_TODO_PATH`), with
+ *   JSON front matter for `id / title / tags / status / created_at /
+ *   assigned_to_session`. The extension exposes both a `/todos` TUI for
+ *   humans and a `todo` tool for the agent (list, create, claim, update,
+ *   append, release, delete). Optional automatic GC drops closed todos after
+ *   N days.
+ *
+ *   Designed to survive sessions, branches, and parallel pi processes: a
+ *   per-todo lock file (`<id>.lock`) prevents two sessions from editing the
+ *   same todo, and todos can be assigned to a specific session.
+ *
+ * Use cases:
+ *   - Persistent task lists for multi-session work (notes survive after pi
+ *     exits).
+ *   - Coordinating multiple pi sessions / forks via claim/release so each
+ *     picks up a distinct task.
+ *   - Letting the agent naturally use a real todo store instead of an ad-hoc
+ *     in-context checklist.
+ *   - Tagging work for quick filtering (`tags: ["qa", "blocked"]`).
+ *
+ * Common usage patterns:
+ *   - `/todos` — open the visual todo manager (filter, claim, edit, close).
+ *   - Tell the model "add a todo to ...", "claim the next open task",
+ *     "mark this todo done" — it uses the `todo` tool family directly.
+ *   - Customize storage via `PI_TODO_PATH=/path/to/dir` (e.g. a shared
+ *     directory across worktrees) and GC behavior via
+ *     `<todo-dir>/settings.json`.
+ *
+ * File layout:
+ *   This extension stores todo items as files under <todo-dir> (defaults to .pi/todos,
+ *   or the path in PI_TODO_PATH).  Each todo is a standalone markdown file named
+ *   <id>.md and an optional <id>.lock file is used while a session is editing it.
  *
  * File format in .pi/todos:
  * - The file starts with a JSON object (not YAML) containing the front matter:
