@@ -35,7 +35,6 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [prompt]` forks the current session into a new pi process in a right-hand tmux split (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux) |
-| [`split-tree.ts`](extensions/split-tree.ts) | `/split-tree [prompt]` pick a point in the session tree, fork from there, and open it in a right-hand tmux split |
 
 ### PATH shims (activated by `uv.ts`)
 
@@ -85,6 +84,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`security-audit.md`](prompts/security-audit.md) | Comprehensive security audit (OWASP, deps, secrets) |
 | [`summarize-url.md`](prompts/summarize-url.md) | Fetch and summarize URLs (including HN posts + comments) |
 | [`commit.md`](prompts/commit.md) | `/commit` slash command. Preloads `git status`/`diff`/`log` via `inline-bash` and delegates formatting to the `commit` skill |
+| [`go.md`](prompts/go.md) | `/go` execute prompt that nudges the agent to follow Explore → Plan → Clarify → Execute |
 
 ## Symlink targets
 

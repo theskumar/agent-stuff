@@ -42,7 +42,7 @@ for name in "${CC_SKILLS[@]}"; do
 done
 
 echo "==> Skills → ~/.pi/agent/skills/ (pi agent)"
-PI_SKILLS=(find-skills google-workspace librarian mermaid notion sentry)
+PI_SKILLS=(google-workspace librarian mermaid notion sentry)
 for name in "${PI_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.pi/agent/skills/$name"
 done
@@ -66,5 +66,9 @@ CC_PROMPTS=(
 for name in "${CC_PROMPTS[@]}"; do
   link "$REPO_DIR/prompts/$name.md" "$HOME/.claude/commands/$name.md"
 done
+
+echo "==> Pruning dead symlinks"
+find "$HOME/.pi/agent" "$HOME/.agents" "$HOME/.claude" \
+     -xtype l -print -delete 2>/dev/null || true
 
 echo "Done."
