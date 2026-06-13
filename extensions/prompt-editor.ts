@@ -1,3 +1,40 @@
+/**
+ * Prompt Editor + Modes Extension
+ *
+ * What it is:
+ *   Replaces pi's default prompt editor with a richer one that:
+ *     1. Shows a "mode" label and color-coded border tied to the active model
+ *        and thinking level.
+ *     2. Persists named modes (provider + modelId + thinkingLevel + optional
+ *        color) in `.pi/modes.json` (project) or `~/.pi/agent/modes.json`
+ *        (global). Modes can be added, renamed, deleted, and switched.
+ *     3. Loads prompt history from past sessions for the current cwd, so
+ *        up-arrow recalls previous prompts across pi runs.
+ *     4. Surfaces a transient "custom" overlay mode whenever the user picks a
+ *        model/thinking-level combo that doesn't match any saved mode, and
+ *        offers a "store" action to save it into a named mode.
+ *
+ *   Multi-process safe: file lock + patch-merge on save, so concurrent pi
+ *   sessions won't clobber each other's mode edits.
+ *
+ * Use cases:
+ *   - Switching between "fast" (cheap, thinking off) and "deep" (expensive,
+ *     thinking high) workflows without re-picking models.
+ *   - Project-scoped overrides via `.pi/modes.json` (e.g. force a different
+ *     default for a Bedrock-only repo).
+ *   - Persisting one-off model/thinking selections into a reusable mode.
+ *   - Reusing prompts typed in earlier sessions on the same project.
+ *
+ * Common usage patterns:
+ *   - `/mode` — open mode selector; pick a mode or "Configure modes…".
+ *   - `/mode <name>` — switch to a saved mode directly.
+ *   - `/mode store [name]` — save the current selection into a mode.
+ *   - `Ctrl+Shift+M` — open the mode selector.
+ *   - `Ctrl+Space` — cycle to the next saved mode.
+ *   - Edit `.pi/modes.json` (or `~/.pi/agent/modes.json`) directly to define
+ *     modes outside the UI, e.g. the `fast` mode used by tree-fast-summary.
+ */
+
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { CustomEditor, ModelSelectorComponent, SettingsManager } from "@earendil-works/pi-coding-agent";
 import path from "node:path";
