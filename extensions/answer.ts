@@ -1,13 +1,31 @@
 /**
- * Q&A extraction hook - extracts questions from assistant responses
+ * Answer Extension
  *
- * Custom interactive TUI for answering questions.
+ * What it is:
+ *   When the assistant ends a turn by asking the user a batch of questions,
+ *   this extension extracts those questions as structured JSON via a side LLM
+ *   call, then opens an interactive TUI so the user can answer each question
+ *   one at a time without scrolling back through the transcript. The
+ *   compiled answers are then submitted as the user's next message.
  *
- * Demonstrates the "prompt generator" pattern with custom TUI:
- * 1. /answer command gets the last assistant message
- * 2. Shows a spinner while extracting questions as structured JSON
- * 3. Presents an interactive TUI to navigate and answer questions
- * 4. Submits the compiled answers when done
+ *   Demonstrates the "prompt generator + custom TUI" pattern: command grabs
+ *   the last assistant message, runs structured extraction, walks the user
+ *   through a custom editor, then sends a single combined reply.
+ *
+ * Use cases:
+ *   - Reviewing and answering long lists of clarifying questions from a
+ *     planning / scoping turn without losing track of which one you're on.
+ *   - Quickly approving/rejecting decisions the assistant batched at the end
+ *     of its turn.
+ *   - Generating a clean, well-formatted user response when there are 5+
+ *     questions to address.
+ *
+ * Common usage patterns:
+ *   - `/answer` — extract and walk through questions from the last assistant
+ *     message.
+ *   - `Ctrl+.` — same as `/answer`, faster keybinding.
+ *   - Skip a question with the configured "next" key; submit when done to
+ *     send all answers as the next user message.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
