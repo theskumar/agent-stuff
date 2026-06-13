@@ -1,19 +1,42 @@
 /**
- * Lean-Read Extension. Overrides the built-in `read` tool to route through
- * `lean-ctx read` for token-efficient file reads:
+ * Lean-Read Extension
  *
- *   - Small files and configs → full content
- *   - Medium code files (8KB-96KB) → `map` mode (deps + API signatures)
- *   - Large code files (>=96KB) → `signatures` mode (AST only)
- *   - Explicit `mode` param overrides auto-selection
- *   - `offset`/`limit` translated to `lines:N-M` mode
+ * What it is:
+ *   Overrides pi's built-in `read` tool so file reads are routed through
+ *   `lean-ctx read`, which auto-compresses larger code files:
  *
- * Falls back to the built-in read for: images, missing binary, exec failure.
- * Caller can force full content with `mode: "full"`.
+ *     - Small files and configs → full content
+ *     - Medium code files (8KB-96KB) → `map` mode (imports + API signatures)
+ *     - Large code files (≥96KB) → `signatures` mode (AST signatures only)
+ *     - Explicit `mode` param overrides auto-selection
+ *     - `offset`/`limit` are translated to `lines:N-M` mode
  *
- * Design: compose, do not reimplement. createReadToolDefinition handles images,
- * rendering, and the fallback path. We only intercept the text-file case to
- * shell out to `lean-ctx`.
+ *   Falls back to the built-in read for images, when the binary is missing,
+ *   or on exec failure. Callers can always force full content with
+ *   `mode: "full"`.
+ *
+ *   Requires `lean-ctx` (from pi-lean-ctx) to be on PATH.
+ *
+ * Use cases:
+ *   - Letting the agent skim large repos without burning context window on
+ *     full file bodies it doesn't need yet.
+ *   - Cheaper "look around" reads early in a task, with explicit `mode:full`
+ *     reads later when the agent needs to actually edit.
+ *   - Working in monorepos / generated code where many files are big enough
+ *     that the default full read is wasteful.
+ *
+ * Common usage patterns:
+ *   - Agent calls `read({ path })` → tool returns the most useful
+ *     compression for the file size; no caller change needed.
+ *   - `read({ path, mode: "full" })` — force full body when editing.
+ *   - `read({ path, offset: 100, limit: 40 })` — line range (translated to
+ *     `lean-ctx --lines 100-139`).
+ *   - `read({ path, mode: "signatures" })` / `mode: "map"` — explicit lean
+ *     view of a code file.
+ *
+ * Design: compose, do not reimplement. createReadToolDefinition handles
+ * images, rendering, and the fallback path. We only intercept the text-file
+ * case to shell out to `lean-ctx`.
  */
 
 import type {
