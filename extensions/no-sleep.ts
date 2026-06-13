@@ -1,9 +1,33 @@
 /**
- * Prevent macOS from sleeping while pi's agent is running.
+ * No-Sleep Extension
  *
- * Uses caffeinate(8). No footer/status UI is rendered, and no chat
- * notifications are emitted for routine caffeination state changes.
- * Error/warning notifications are still surfaced.
+ * What it is:
+ *   Prevents macOS from sleeping while pi's agent is actively working.
+ *   Spawns `caffeinate(8)` with the right flags while a turn is in flight,
+ *   and tears it down when the agent goes idle. No persistent UI; only
+ *   error/warning notifications surface to the user.
+ *
+ *   Scope is controlled by `PI_NO_SLEEP_SCOPE` (default `agent`):
+ *     - `agent`   — caffeinate only while the agent is running (default).
+ *     - `session` — caffeinate for the entire pi session.
+ *   Toggle on/off via `PI_NO_SLEEP=0` (env) or the `/no-sleep` command.
+ *
+ *   Source: adapted from mitsuhiko/agent-stuff.
+ *
+ * Use cases:
+ *   - Long autonomous runs (refactors, test loops, big migrations) that
+ *     outlast your screen's sleep timer.
+ *   - Overnight `/loop` or `/goal`-driven runs where a sleeping mac would
+ *     pause the agent.
+ *   - Plugged-in laptops where you want pi to keep working but normal sleep
+ *     for everything else.
+ *
+ * Common usage patterns:
+ *   - Install once; runs automatically on supported (macOS) machines.
+ *   - `/no-sleep` — toggle caffeination on/off for the current session.
+ *   - `PI_NO_SLEEP=0 pi` — disable entirely.
+ *   - `PI_NO_SLEEP_SCOPE=session pi` — caffeinate for the whole session,
+ *     not just active turns.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
