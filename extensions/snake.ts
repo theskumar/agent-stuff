@@ -1,5 +1,23 @@
 /**
- * Snake game extension - play snake with /snake command
+ * Snake Extension
+ *
+ * What it is:
+ *   A tiny in-terminal Snake game (`/snake`) that runs inside a pi overlay.
+ *   Pure TUI — no model calls — useful as a five-second break, a smoke test
+ *   that the TUI/overlay/keybinding plumbing is working, and as an example
+ *   extension for `pi.ui.custom`.
+ *
+ * Use cases:
+ *   - Verify a new pi build or terminal setup renders overlays correctly.
+ *   - Reference example for writing an interactive TUI extension.
+ *   - Light decompression while a long turn finishes elsewhere.
+ *
+ * Common usage patterns:
+ *   - `/snake` — start a new game.
+ *   - Arrow keys (or WASD) to move; eat food, don't hit the walls or
+ *     yourself.
+ *   - High score is kept in-memory for the session.
+ *   - Esc / q to quit.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
