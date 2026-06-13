@@ -1,7 +1,23 @@
 /**
  * Code Review Extension (inspired by Codex's review feature)
  *
- * Provides a `/review` command that prompts the agent to review code changes.
+ * What it is:
+ *   A `/review` command that turns pi into a structured code reviewer. It
+ *   gathers diff context (PR, branch, commit, uncommitted changes, or a
+ *   folder snapshot), injects language-aware review rubrics, an optional
+ *   project `REVIEW_GUIDELINES.md`, and any persisted custom instructions,
+ *   then asks the model to review and emit a machine-readable `review-meta`
+ *   JSON trailer so loop-fixing flows can act on the verdict.
+ *
+ * Use cases:
+ *   - Self-review of your own uncommitted work before opening a PR.
+ *   - Review a teammate's PR locally without leaving the terminal.
+ *   - Review a specific commit / range when bisecting a regression.
+ *   - Snapshot review of a folder (no diff) to audit existing code quality.
+ *   - Feeding the review verdict into `/loop` to drive automated fix cycles.
+ *
+ * Common usage patterns:
+ *
  * Supports multiple review modes:
  * - Review a GitHub pull request (checks out the PR locally)
  * - Review against a base branch (PR style)
