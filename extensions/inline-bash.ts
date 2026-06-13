@@ -1,10 +1,29 @@
 /**
- * Inline Bash Extension. Expands `!{command}` patterns in user prompts.
+ * Inline Bash Extension
  *
- * Example prompts:
- *   What's in !{pwd}?
- *   The current branch is !{git branch --show-current} and status: !{git status --short}
- *   My node version is !{node --version}
+ * What it is:
+ *   Expands `!{command}` patterns inside user prompts (and inside expanded
+ *   prompt templates) by running the command in a subshell and substituting
+ *   its stdout/stderr in place before the message is sent to the model.
+ *
+ *   Distinct from pi's built-in whole-line `!command` bash escape: that runs
+ *   bash interactively. `!{cmd}` is a literal in-string substitution, so it
+ *   can be sprinkled inside a sentence or a prompt template.
+ *
+ * Use cases:
+ *   - Embedding live shell context into a prompt without copy/pasting (`git
+ *     status`, `pwd`, version strings, etc.).
+ *   - Prompt templates (`/commit`, custom slash commands) that need to inline
+ *     command output at expansion time.
+ *   - Avoiding a separate tool round-trip when the value is small, known, and
+ *     deterministic.
+ *
+ * Common usage patterns:
+ *   - `What's in !{pwd}?`
+ *   - `The current branch is !{git branch --show-current} and status:
+ *     !{git status --short}`
+ *   - `My node version is !{node --version}`
+ *   - Inside a prompt template body: `Diff to review: !{git diff --staged}`
  *
  * Two hook points:
  *   - `input`   : catches `!{...}` typed directly by the user. Expands before
