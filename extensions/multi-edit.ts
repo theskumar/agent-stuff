@@ -1,12 +1,40 @@
 /**
- * Multi-Edit Extension. Overrides the built-in `edit` tool with three additions:
+ * Multi-Edit Extension
  *
- *   1. Multi-file edits per call. Each item in `edits[]` may carry its own `path`,
- *      inheriting from the top-level `path` when omitted.
- *   2. Codex-style `patch` parameter (*** Begin Patch ... *** End Patch) supporting
- *      Add File / Delete File / Update File operations.
- *   3. Backwards-compatible with the built-in's single-file `{path, edits[]}` shape
- *      and the legacy `{path, oldText, newText}` shape.
+ * What it is:
+ *   Overrides pi's built-in `edit` tool so the agent can:
+ *     1. Apply edits across multiple files in a single tool call (each
+ *        `edits[]` entry may carry its own `path`; top-level `path` is the
+ *        default).
+ *     2. Apply Codex-style `*** Begin Patch ... *** End Patch` patches with
+ *        Add File / Delete File / Update File hunks.
+ *     3. Keep working with the original single-file shapes
+ *        (`{path, edits[]}` and the legacy `{path, oldText, newText}`),
+ *        so existing prompts and skills continue to work unchanged.
+ *
+ * Use cases:
+ *   - Coordinated renames or refactors touching N files in one turn (fewer
+ *     tool calls, fewer LLM round-trips).
+ *   - Applying a unified Codex-style patch the model already produced, with
+ *     proper add/delete file semantics.
+ *   - Backwards-compatible drop-in for skills/prompts that assume the
+ *     built-in `edit` shape.
+ *
+ * Common usage patterns:
+ *   - Single file (built-in shape):
+ *       edit({ path: "src/a.ts", edits: [{ oldText, newText }] })
+ *   - Multi-file in one call:
+ *       edit({ edits: [
+ *         { path: "src/a.ts", oldText, newText },
+ *         { path: "src/b.ts", oldText, newText },
+ *       ] })
+ *   - Codex patch:
+ *       edit({ patch: `*** Begin Patch
+ *       *** Update File: src/a.ts
+ *       @@
+ *       -foo
+ *       +bar
+ *       *** End Patch` })
  *
  * Design: compose, do not reimplement. The single-file code path delegates to the
  * built-in `edit` tool definition (`createEditToolDefinition`) so BOM handling,
