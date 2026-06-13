@@ -1,9 +1,31 @@
 /**
- * `/split-fork` — branch the current session into a new pi process in a
- * right-hand tmux split.
+ * Split-Fork Extension
  *
- * Adapted from mitsuhiko/agent-stuff (Ghostty/AppleScript original) to use tmux
- * `split-window` instead. Requires pi to be running inside a tmux pane.
+ * What it is:
+ *   `/split-fork` branches the current pi session: it copies the session
+ *   transcript into a fresh session id and spawns a new pi process attached
+ *   to that copy in a right-hand tmux split. The original session keeps
+ *   running on the left; the fork can diverge freely without touching it.
+ *
+ *   Requires pi to be running inside a tmux pane.
+ *
+ *   Adapted from mitsuhiko/agent-stuff (the original used Ghostty +
+ *   AppleScript; this port uses tmux `split-window`).
+ *
+ * Use cases:
+ *   - Explore an alternative direction without losing the current thread —
+ *     keep the main session intact, experiment in the fork.
+ *   - Compare two prompting / model / mode strategies side-by-side from the
+ *     same starting point.
+ *   - Branch-then-throw-away for risky tool use (e.g. destructive bash
+ *     commands) while the original session waits.
+ *
+ * Common usage patterns:
+ *   - `/split-fork` — fork the current session into a new tmux split.
+ *   - Work in the right pane on the alternate plan; the left pane is the
+ *     original.
+ *   - Close the fork (`exit` in the right pane) to drop the experiment, or
+ *     keep both panes if both branches turn out useful.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
