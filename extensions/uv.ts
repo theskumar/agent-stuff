@@ -1,9 +1,35 @@
 /**
- * UV Extension - Redirects Python tooling to uv equivalents
+ * UV Extension
  *
- * This extension wraps the bash tool to prepend intercepted-commands to PATH,
- * which contains shim scripts that intercept common Python tooling commands
- * and redirect agents to use uv instead.
+ * What it is:
+ *   Redirects classic Python tooling to `uv` equivalents inside pi. Wraps
+ *   the built-in `bash` tool so a small `intercepted-commands/` directory is
+ *   prepended to `$PATH`. Shim scripts there intercept `pip`, `pip3`,
+ *   `poetry`, `python`, and `python3` and either block them with a helpful
+ *   error message or rewrite them as `uv run …`.
+ *
+ *   Because PATH shims can be bypassed via explicit interpreter paths
+ *   (`.venv/bin/python`), the extension also blocks disallowed invocations
+ *   at bash spawn time so the agent can't sidestep the policy.
+ *
+ *   Requires `uv` to be installed.
+ *
+ * Use cases:
+ *   - Steering agents toward the project's `uv`-managed environment in
+ *     Python repos that have standardized on uv.
+ *   - Preventing accidental `pip install` / `poetry add` invocations that
+ *     would mutate the wrong environment.
+ *   - Educating the agent on the correct uv idiom by surfacing the
+ *     equivalent command in the error message.
+ *
+ * Common usage patterns:
+ *   - Install and forget; replacements happen transparently when bash runs.
+ *   - The agent learns from the shim's error message and retries with the
+ *     suggested `uv` form, e.g.:
+ *       `pip install requests`     → suggests `uv add requests` or `uv run --with requests …`.
+ *       `python script.py`         → rewritten to `uv run python script.py`.
+ *       `python -m venv .venv`     → blocked; pointer to `uv venv`.
+ *       `poetry add foo`           → blocked; pointer to `uv add foo`.
  *
  * Intercepted commands:
  * - pip/pip3: Blocked with suggestions to use `uv add` or `uv run --with`
