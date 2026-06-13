@@ -1,11 +1,30 @@
 /**
  * Desktop Notification Extension
  *
- * Sends a native desktop notification when the agent finishes and is waiting for input.
- * Uses OSC 777 escape sequence - no external dependencies.
+ * What it is:
+ *   Sends a native desktop notification whenever the agent finishes a turn
+ *   and is waiting for the user. Implemented as a pure OSC 777 escape
+ *   sequence (with tmux DCS-passthrough wrapping when running inside tmux),
+ *   so it has no external dependencies — the terminal emulator surfaces the
+ *   notification.
  *
- * Supported terminals: Ghostty, iTerm2, WezTerm, rxvt-unicode
- * Not supported: Kitty (uses OSC 99), Terminal.app, Windows Terminal, Alacritty
+ *   Supported terminals: Ghostty, iTerm2, WezTerm, rxvt-unicode.
+ *   Not supported: Kitty (uses OSC 99), Terminal.app, Windows Terminal,
+ *   Alacritty.
+ *
+ * Use cases:
+ *   - Long-running turns where you want to switch to another window and only
+ *     come back when pi is ready for input.
+ *   - Background `/loop` or `/goal` runs to get pinged when the agent stops
+ *     making progress (e.g. blocks on a question).
+ *   - Pair-programming flow where you only check pi when it has output.
+ *
+ * Common usage patterns:
+ *   - Install and forget; notifications fire automatically on `turn_end`.
+ *   - Notification title shows pi + cwd; body shows the first line of the
+ *     last assistant message.
+ *   - On unsupported terminals the OSC sequence is silently ignored, so it's
+ *     safe to leave installed everywhere.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
