@@ -1,3 +1,35 @@
+/**
+ * Goal Extension
+ *
+ * What it is:
+ *   Tracks a single long-running "thread goal" (objective + optional token
+ *   budget) for the current session. The active goal is injected into the
+ *   system prompt so every agent turn stays aligned, token and time usage are
+ *   accounted across turns, and on `turn_end` the extension auto-queues a
+ *   continuation prompt nudging the agent to keep working until the goal is
+ *   verifiably complete or the budget is exhausted.
+ *
+ *   Exposes three tools to the model — `get_goal`, `create_goal`,
+ *   `update_goal` (status: "complete" only) — and the `/goal` command for the
+ *   user. State persists via session custom entries so the goal survives
+ *   resume / tree navigation.
+ *
+ * Use cases:
+ *   - Multi-turn refactors, migrations, or feature work where the agent must
+ *     stay focused over many turns.
+ *   - Capped autonomous runs ("work on X for up to 200k tokens, then stop").
+ *   - Loop-style flows where you want explicit completion verification rather
+ *     than the model declaring victory on partial progress.
+ *
+ * Common usage patterns:
+ *   - `/goal Implement and test the new auth flow end-to-end` — set objective.
+ *   - `/goal` — show current goal, status, and usage summary.
+ *   - `/goal pause` / `/goal resume` — toggle continuation injection.
+ *   - `/goal clear` — drop the goal entirely.
+ *   - Tools: agent uses `get_goal` to inspect state and `update_goal` with
+ *     status "complete" only after auditing that every requirement is met.
+ */
+
 import { randomUUID } from "node:crypto";
 
 import { StringEnum } from "@earendil-works/pi-ai";
