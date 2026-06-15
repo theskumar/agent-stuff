@@ -13,6 +13,10 @@
  *     4. Surfaces a transient "custom" overlay mode whenever the user picks a
  *        model/thinking-level combo that doesn't match any saved mode, and
  *        offers a "store" action to save it into a named mode.
+ *     5. Shows a low-battery indicator (🪫 NN%) on the right edge of the
+ *        editor top border when the laptop battery drops below a threshold
+ *        and the machine is not charging. macOS (`pmset`) and Linux
+ *        (`/sys/class/power_supply`) only; other platforms are no-ops.
  *
  *   Multi-process safe: file lock + patch-merge on save, so concurrent pi
  *   sessions won't clobber each other's mode edits.
@@ -33,6 +37,17 @@
  *   - `Ctrl+Space` — cycle to the next saved mode.
  *   - Edit `.pi/modes.json` (or `~/.pi/agent/modes.json`) directly to define
  *     modes outside the UI, e.g. the `fast` mode used by tree-fast-summary.
+ *
+ * Battery indicator config (lowest → highest precedence):
+ *   - `~/.pi/agent/battery.json` (global) and `.pi/battery.json` (project):
+ *       { "threshold": 20, "disable": false }
+ *     Project file overrides global. Malformed JSON fails loudly.
+ *   - Env vars override file config:
+ *       `PI_BATTERY_THRESHOLD=20` — show indicator when percent < threshold.
+ *       `PI_BATTERY_DISABLE=1`   — disable polling entirely.
+ *   - Defaults: threshold 20, hysteresis +5 (clears at ≥ 25 or while charging).
+ *   - Polls every 60s. Probe failures (missing tool, no battery, unsupported
+ *     OS) permanently latch the indicator off for the process.
  */
 
 import type {
@@ -44,11 +59,20 @@ import {
   ModelSelectorComponent,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import {
+  Key,
+  matchesKey,
+  truncateToWidth,
+  visibleWidth,
+} from "@earendil-works/pi-tui";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 // =============================================================================
 // Modes
@@ -1242,6 +1266,14 @@ class PromptEditor extends CustomEditor {
    * We use this to keep the label consistent (e.g. same as the footer/status bar).
    */
   public modeLabelColor?: (text: string) => string;
+  /**
+   * Optional right-side decoration (e.g. low-battery indicator). Rendered on the
+   * top border, right-aligned, between the label fill and the right corner.
+   */
+  public rightDecorationProvider?: () => {
+    text: string;
+    color: (text: string) => string;
+  } | null;
   private lockedBorder = false;
   private _borderColor?: (text: string) => string;
 
@@ -1330,16 +1362,46 @@ class PromptEditor extends CustomEditor {
     const remaining = width - prefix.length - labelChunkLen;
     if (remaining < 0) return lines;
 
-    const right = "─".repeat(Math.max(0, remaining));
+    // Right-side decoration (e.g. low-battery indicator).
+    // Use visibleWidth() rather than .length so multi-cell glyphs (emoji, CJK)
+    // don't break border alignment.
+    const decoration = this.rightDecorationProvider?.() ?? null;
+    let decorationChunkWidth = 0;
+    let decorationText = "";
+    let decorationColor: ((s: string) => string) | null = null;
+    if (decoration && decoration.text) {
+      // Reserve " <text>──" on the right (1 cell left pad + 2 cell trailing fill).
+      const decoLeftPad = 1;
+      const decoRightFill = 2;
+      const maxDecoWidth = Math.max(
+        0,
+        remaining - decoLeftPad - decoRightFill,
+      );
+      if (maxDecoWidth > 0) {
+        decorationText = truncateToWidth(decoration.text, maxDecoWidth);
+        decorationColor = decoration.color;
+        decorationChunkWidth =
+          decoLeftPad + visibleWidth(decorationText) + decoRightFill;
+      }
+    }
+
+    const right = "─".repeat(Math.max(0, remaining - decorationChunkWidth));
     const coloredLabel = labelParts
       .map((part) => (part.text ? part.color(part.text) : ""))
       .join("");
+    const coloredDecoration =
+      decorationText && decorationColor
+        ? this.borderColor(" ") +
+          decorationColor(decorationText) +
+          this.borderColor("──")
+        : "";
     lines[0] =
       this.borderColor(prefix) +
       (labelLeftSpace ? labelColor(labelLeftSpace) : "") +
       coloredLabel +
       (labelRightSpace ? labelColor(labelRightSpace) : "") +
-      this.borderColor(right);
+      this.borderColor(right) +
+      coloredDecoration;
     return lines;
   }
 
@@ -1503,6 +1565,216 @@ function buildHistoryList(
   return deduped.slice(-MAX_HISTORY_ENTRIES);
 }
 
+// =============================================================================
+// Battery indicator
+// =============================================================================
+
+type BatteryState = {
+  percent: number;
+  charging: boolean;
+} | null;
+
+const BATTERY_DEFAULT_LOW = 20;
+const BATTERY_HYSTERESIS = 5;
+const BATTERY_POLL_MS = 60_000;
+
+type BatteryConfig = {
+  disabled: boolean;
+  lowThreshold: number;
+  clearThreshold: number;
+};
+
+const DEFAULT_BATTERY_CONFIG: BatteryConfig = {
+  disabled: false,
+  lowThreshold: BATTERY_DEFAULT_LOW,
+  clearThreshold: BATTERY_DEFAULT_LOW + BATTERY_HYSTERESIS,
+};
+let batteryConfig: BatteryConfig = DEFAULT_BATTERY_CONFIG;
+// Cache configs per cwd so switching projects/worktrees picks up the right
+// `.pi/battery.json`. The previous design cached process-wide on first cwd.
+const batteryConfigByCwd = new Map<string, BatteryConfig>();
+
+let batteryState: BatteryState = null;
+let batteryShown = false; // hysteresis latch
+let batteryPollTimer: NodeJS.Timeout | null = null;
+let batteryProbeAvailable = true;
+
+function parseBoolEnv(v: string | undefined): boolean {
+  if (!v) return false;
+  const s = v.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
+function parseThreshold(v: unknown): number | undefined {
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  if (n <= 0 || n >= 100) return undefined;
+  return Math.round(n);
+}
+
+async function readBatteryConfigFile(
+  fp: string,
+): Promise<Record<string, unknown> | null> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(fp, "utf8");
+  } catch (err) {
+    // ENOENT is expected when the user hasn't created a config; any other IO
+    // error (e.g. EACCES) should surface so the user can fix it.
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return null;
+    throw new Error(`battery config: failed to read ${fp}: ${String(err)}`);
+  }
+  // JSON parse errors must not be swallowed silently — a typo in battery.json
+  // would otherwise be invisible. Rethrow with context.
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(
+      `battery config: invalid JSON in ${fp}: ${(err as Error).message}`,
+    );
+  }
+}
+
+async function loadBatteryConfig(cwd: string): Promise<BatteryConfig> {
+  let disabled = false;
+  let lowThreshold = BATTERY_DEFAULT_LOW;
+
+  // File config (project then global), lowest precedence.
+  const candidates = [
+    path.join(cwd, ".pi", "battery.json"),
+    path.join(getGlobalAgentDir(), "battery.json"),
+  ];
+  for (const fp of candidates) {
+    const parsed = await readBatteryConfigFile(fp);
+    if (!parsed) continue;
+    if (typeof parsed.disable === "boolean") disabled = parsed.disable;
+    const t = parseThreshold(parsed.threshold);
+    if (t !== undefined) lowThreshold = t;
+    break;
+  }
+
+  // Env vars override file.
+  if (process.env.PI_BATTERY_DISABLE !== undefined) {
+    disabled = parseBoolEnv(process.env.PI_BATTERY_DISABLE);
+  }
+  const envT = parseThreshold(process.env.PI_BATTERY_THRESHOLD);
+  if (envT !== undefined) lowThreshold = envT;
+
+  return {
+    disabled,
+    lowThreshold,
+    clearThreshold: Math.min(100, lowThreshold + BATTERY_HYSTERESIS),
+  };
+}
+
+async function probeBatteryMac(): Promise<BatteryState> {
+  const { stdout } = await execFileAsync("pmset", ["-g", "batt"], {
+    timeout: 1000,
+  });
+  const pctMatch = stdout.match(/(\d+)%/);
+  if (!pctMatch) return null;
+  const percent = Number(pctMatch[1]);
+  const charging = /;\s*(charging|charged|AC attached)/i.test(stdout);
+  return { percent, charging };
+}
+
+async function probeBatteryLinux(): Promise<BatteryState> {
+  const base = "/sys/class/power_supply";
+  const entries = await fs.readdir(base).catch(() => [] as string[]);
+  const batName = entries.find((n) => /^BAT/i.test(n));
+  if (!batName) return null;
+  const [capRaw, statusRaw] = await Promise.all([
+    fs.readFile(path.join(base, batName, "capacity"), "utf8").catch(() => ""),
+    fs.readFile(path.join(base, batName, "status"), "utf8").catch(() => ""),
+  ]);
+  const percent = Number(capRaw.trim());
+  if (!Number.isFinite(percent)) return null;
+  const status = statusRaw.trim().toLowerCase();
+  const charging = status === "charging" || status === "full";
+  return { percent, charging };
+}
+
+async function readBattery(): Promise<BatteryState> {
+  if (!batteryProbeAvailable) return null;
+  // We intentionally catch here because this runs on a 60s poll: any probe
+  // error (missing tool, permission denied, no battery present) means we can't
+  // ever surface a useful indicator, so we latch off rather than retrying
+  // forever. This is the IO boundary for the battery feature.
+  try {
+    let result: BatteryState;
+    if (process.platform === "darwin") {
+      result = await probeBatteryMac();
+    } else if (process.platform === "linux") {
+      result = await probeBatteryLinux();
+    } else {
+      result = null;
+    }
+    if (result === null) {
+      // No battery available on this host (e.g. desktop, VM, unsupported OS).
+      // Don't keep polling for something that will never appear.
+      batteryProbeAvailable = false;
+    }
+    return result;
+  } catch {
+    batteryProbeAvailable = false;
+    return null;
+  }
+}
+
+function updateBatteryLatch(state: BatteryState): boolean {
+  if (!state || state.charging) {
+    const was = batteryShown;
+    batteryShown = false;
+    return was;
+  }
+  if (batteryShown) {
+    if (state.percent >= batteryConfig.clearThreshold) {
+      batteryShown = false;
+      return true;
+    }
+    return false;
+  }
+  if (state.percent < batteryConfig.lowThreshold) {
+    batteryShown = true;
+    return true;
+  }
+  return false;
+}
+
+async function refreshBattery(): Promise<void> {
+  const next = await readBattery();
+  const prevPercent = batteryState?.percent;
+  batteryState = next;
+  const latchChanged = updateBatteryLatch(next);
+  if (latchChanged || (batteryShown && next?.percent !== prevPercent)) {
+    requestEditorRender?.();
+  }
+}
+
+function startBatteryPolling(): void {
+  if (batteryConfig.disabled) return;
+  if (batteryPollTimer) return;
+  void refreshBattery();
+  batteryPollTimer = setInterval(() => {
+    void refreshBattery();
+  }, BATTERY_POLL_MS);
+  // Don't keep the process alive just for battery polling.
+  batteryPollTimer.unref?.();
+}
+
+type EditorTheme = ConstructorParameters<typeof CustomEditor>[1];
+
+function getBatteryDecoration(
+  theme: EditorTheme,
+): { text: string; color: (s: string) => string } | null {
+  if (!batteryShown || !batteryState) return null;
+  const text = `🪫 ${batteryState.percent}%`;
+  // Trust the theme to resolve the color key. If "error" is missing the theme
+  // is responsible for fallback behaviour — matches how modeLabelColor uses
+  // `uiTheme.fg("dim", text)` without defensive wrapping.
+  return { text, color: (s: string) => theme.fg("error", s) };
+}
+
 // Overlay mode state ("custom"). Not selectable, not cycled into.
 let customOverlay: ModeSpec | null = null;
 
@@ -1529,6 +1801,7 @@ function setEditor(
     editor.modeLabelProvider = () => runtime.currentMode;
     // Keep the mode label color stable (match footer/status bar).
     editor.modeLabelColor = (text: string) => uiTheme.fg("dim", text);
+    editor.rightDecorationProvider = () => getBatteryDecoration(uiTheme);
     const borderColor = (text: string) => {
       const isBashMode = editor.getText().trimStart().startsWith("!");
       if (isBashMode) {
@@ -1644,6 +1917,15 @@ export default function (pi: ExtensionAPI) {
     };
     await ensureRuntime(pi, ctx);
     customOverlay = null;
+    // Reload per-cwd so switching projects picks up project-local config.
+    const cachedCfg = batteryConfigByCwd.get(ctx.cwd);
+    if (cachedCfg) {
+      batteryConfig = cachedCfg;
+    } else {
+      batteryConfig = await loadBatteryConfig(ctx.cwd);
+      batteryConfigByCwd.set(ctx.cwd, batteryConfig);
+    }
+    startBatteryPolling();
 
     const inferred = inferModeFromSelection(ctx, pi, runtime.data);
     if (inferred) {
