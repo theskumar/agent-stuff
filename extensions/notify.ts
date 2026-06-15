@@ -45,11 +45,7 @@ const notify = (title: string, body: string): void => {
 
 const isTextPart = (part: unknown): part is { type: "text"; text: string } =>
   Boolean(
-    part &&
-    typeof part === "object" &&
-    "type" in part &&
-    part.type === "text" &&
-    "text" in part,
+    part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part,
   );
 
 const extractLastAssistantText = (
@@ -103,9 +99,7 @@ const simpleMarkdown = (text: string, width = 80): string => {
   return markdown.render(width).join("\n");
 };
 
-const formatNotification = (
-  text: string | null,
-): { title: string; body: string } => {
+const formatNotification = (text: string | null): { title: string; body: string } => {
   const simplified = text ? simpleMarkdown(text) : "";
   const normalized = simplified.replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -113,10 +107,7 @@ const formatNotification = (
   }
 
   const maxBody = 200;
-  const body =
-    normalized.length > maxBody
-      ? `${normalized.slice(0, maxBody - 1)}…`
-      : normalized;
+  const body = normalized.length > maxBody ? `${normalized.slice(0, maxBody - 1)}…` : normalized;
   return { title: "π", body };
 };
 

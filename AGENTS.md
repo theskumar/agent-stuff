@@ -26,6 +26,7 @@ This repo stores pi extensions, skills, and prompts. Everything is symlinked int
 - `install.sh` globs each directory, so new files are picked up automatically. Just re-run it.
 - Never place files directly in the symlink targets (`~/.pi/agent/extensions/`, etc.). Always work in this repo.
 - Match existing code style and README formatting when adding entries.
+- After modifying any files under `extensions/`, run `npm run fix` to apply Biome lint and formatting fixes before considering the task done.
 
 ## Extension authoring lessons
 

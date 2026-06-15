@@ -50,27 +50,19 @@
  *     OS) permanently latch the indicator off for the process.
  */
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import { execFile } from "node:child_process";
+import type { Dirent } from "node:fs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   CustomEditor,
   ModelSelectorComponent,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  Key,
-  matchesKey,
-  truncateToWidth,
-  visibleWidth,
-} from "@earendil-works/pi-tui";
-import path from "node:path";
-import os from "node:os";
-import fs from "node:fs/promises";
-import type { Dirent } from "node:fs";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const execFileAsync = promisify(execFile);
 
@@ -155,10 +147,7 @@ function getLockPathForFile(filePath: string): string {
   return `${filePath}.lock`;
 }
 
-async function withFileLock<T>(
-  filePath: string,
-  fn: () => Promise<T>,
-): Promise<T> {
+async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
   const lockPath = getLockPathForFile(filePath);
   await ensureDirForFile(lockPath);
 
@@ -169,10 +158,10 @@ async function withFileLock<T>(
       try {
         // Best-effort metadata for debugging stale locks.
         await handle.writeFile(
-          JSON.stringify({
+          `${JSON.stringify({
             pid: process.pid,
             createdAt: new Date().toISOString(),
-          }) + "\n",
+          })}\n`,
           "utf8",
         );
       } catch {
@@ -208,10 +197,7 @@ async function withFileLock<T>(
   }
 }
 
-async function atomicWriteUtf8(
-  filePath: string,
-  content: string,
-): Promise<void> {
+async function atomicWriteUtf8(filePath: string, content: string): Promise<void> {
   await ensureDirForFile(filePath);
 
   const dir = path.dirname(filePath);
@@ -267,10 +253,7 @@ function computeModesPatch(
     patch.currentMode = next.currentMode;
   }
 
-  const keys = new Set([
-    ...Object.keys(base.modes),
-    ...Object.keys(next.modes),
-  ]);
+  const keys = new Set([...Object.keys(base.modes), ...Object.keys(next.modes)]);
   const modesPatch: Record<ModeName, ModeSpecPatch | null> = {};
 
   for (const k of keys) {
@@ -287,12 +270,7 @@ function computeModesPatch(
     }
 
     const diff: ModeSpecPatch = {};
-    const fields: (keyof ModeSpec)[] = [
-      "provider",
-      "modelId",
-      "thinkingLevel",
-      "color",
-    ];
+    const fields: (keyof ModeSpec)[] = ["provider", "modelId", "thinkingLevel", "color"];
     for (const f of fields) {
       const av = a[f];
       const bv = b[f];
@@ -325,8 +303,10 @@ function applyModesPatch(target: ModesFile, patch: ModesPatch): void {
       continue;
     }
 
-    const targetSpec: Record<string, unknown> = (target.modes[mode] ??=
-      {}) as Record<string, unknown>;
+    const targetSpec: Record<string, unknown> = (target.modes[mode] ??= {}) as Record<
+      string,
+      unknown
+    >;
     for (const [k, v] of Object.entries(specPatch)) {
       if (v === null || v === undefined) {
         delete targetSpec[k];
@@ -341,22 +321,12 @@ function normalizeThinkingLevel(level: unknown): ThinkingLevel | undefined {
   if (typeof level !== "string") return undefined;
   const v = level as ThinkingLevel;
   // Keep the list local to avoid importing internal enums.
-  const allowed: ThinkingLevel[] = [
-    "off",
-    "minimal",
-    "low",
-    "medium",
-    "high",
-    "xhigh",
-  ];
+  const allowed: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
   return allowed.includes(v) ? v : undefined;
 }
 
 function sanitizeModeSpec(spec: unknown): ModeSpec {
-  const obj = (spec && typeof spec === "object" ? spec : {}) as Record<
-    string,
-    unknown
-  >;
+  const obj = (spec && typeof spec === "object" ? spec : {}) as Record<string, unknown>;
   return {
     provider: typeof obj.provider === "string" ? obj.provider : undefined,
     modelId: typeof obj.modelId === "string" ? obj.modelId : undefined,
@@ -365,10 +335,7 @@ function sanitizeModeSpec(spec: unknown): ModeSpec {
   };
 }
 
-function createDefaultModes(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
-): ModesFile {
+function createDefaultModes(ctx: ExtensionContext, pi: ExtensionAPI): ModesFile {
   const currentModel = ctx.model;
   const currentThinking = pi.getThinkingLevel();
 
@@ -390,11 +357,7 @@ function createDefaultModes(
   };
 }
 
-function ensureDefaultModeEntries(
-  file: ModesFile,
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
-): void {
+function ensureDefaultModeEntries(file: ModesFile, ctx: ExtensionContext, pi: ExtensionAPI): void {
   for (const name of DEFAULT_MODE_ORDER) {
     if (!file.modes[name]) {
       const defaults = createDefaultModes(ctx, pi);
@@ -425,8 +388,7 @@ async function loadModesFile(
   try {
     const raw = await fs.readFile(filePath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const currentMode =
-      typeof parsed.currentMode === "string" ? parsed.currentMode : "default";
+    const currentMode = typeof parsed.currentMode === "string" ? parsed.currentMode : "default";
     const modesRaw =
       parsed.modes && typeof parsed.modes === "object"
         ? (parsed.modes as Record<string, unknown>)
@@ -448,7 +410,7 @@ async function loadModesFile(
 }
 
 async function saveModesFile(filePath: string, data: ModesFile): Promise<void> {
-  await atomicWriteUtf8(filePath, JSON.stringify(data, null, 2) + "\n");
+  await atomicWriteUtf8(filePath, `${JSON.stringify(data, null, 2)}\n`);
 }
 
 function orderedModeNames(modes: Record<string, ModeSpec>): string[] {
@@ -458,11 +420,7 @@ function orderedModeNames(modes: Record<string, ModeSpec>): string[] {
   return Object.keys(modes).filter((name) => name !== CUSTOM_MODE_NAME);
 }
 
-function getModeBorderColor(
-  theme: any,
-  pi: ExtensionAPI,
-  mode: string,
-): (text: string) => string {
+function getModeBorderColor(theme: any, pi: ExtensionAPI, mode: string): (text: string) => string {
   const spec = runtime.data.modes[mode];
 
   // Explicit color override in JSON.
@@ -586,10 +544,7 @@ const runtime: ModeRuntime = {
 // Updated by setEditor() when the custom editor is instantiated.
 let requestEditorRender: (() => void) | undefined;
 
-async function ensureRuntime(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<void> {
+async function ensureRuntime(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   const filePath = await resolveModesPath(ctx.cwd);
 
   const mtimeMs = await getMtimeMs(filePath);
@@ -619,19 +574,13 @@ async function ensureRuntime(
     if (!runtime.currentMode || !(runtime.currentMode in runtime.data.modes)) {
       runtime.currentMode = runtime.data.currentMode;
     }
-    if (
-      !runtime.lastRealMode ||
-      !(runtime.lastRealMode in runtime.data.modes)
-    ) {
+    if (!runtime.lastRealMode || !(runtime.lastRealMode in runtime.data.modes)) {
       runtime.lastRealMode = runtime.currentMode;
     }
   }
 }
 
-async function persistRuntime(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<void> {
+async function persistRuntime(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   if (!runtime.filePath) return;
 
   // Do not persist currentMode; multiple running pi sessions would fight over it.
@@ -658,10 +607,7 @@ async function persistRuntime(
 // Track the last observed model ourselves and use it for overlays / storing.
 let lastObservedModel: { provider?: string; modelId?: string } = {};
 
-function getCurrentSelectionSpec(
-  pi: ExtensionAPI,
-  _ctx: ExtensionContext,
-): ModeSpec {
+function getCurrentSelectionSpec(pi: ExtensionAPI, _ctx: ExtensionContext): ModeSpec {
   return {
     provider: lastObservedModel.provider,
     modelId: lastObservedModel.modelId,
@@ -694,11 +640,7 @@ async function storeSelectionIntoMode(
   await persistRuntime(pi, ctx);
 }
 
-async function applyMode(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-  mode: string,
-): Promise<void> {
+async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string): Promise<void> {
   await ensureRuntime(pi, ctx);
 
   // "custom" is a runtime-only overlay mode.
@@ -731,10 +673,7 @@ async function applyMode(
         const ok = await pi.setModel(m);
         modelAppliedOk = ok;
         if (!ok && ctx.hasUI) {
-          ctx.ui.notify(
-            `No API key available for ${spec.provider}/${spec.modelId}`,
-            "warning",
-          );
+          ctx.ui.notify(`No API key available for ${spec.provider}/${spec.modelId}`, "warning");
         }
       } else {
         modelAppliedOk = false;
@@ -772,14 +711,7 @@ const MODE_UI_CONFIGURE = "Configure modes…";
 const MODE_UI_ADD = "Add mode…";
 const MODE_UI_BACK = "Back";
 
-const ALL_THINKING_LEVELS: ThinkingLevel[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-];
+const ALL_THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const THINKING_UNSET_LABEL = "(don't change)";
 
 function isDefaultModeName(name: string): boolean {
@@ -807,8 +739,7 @@ function validateModeNameOrError(
   if (!name) return "Mode name cannot be empty";
   if (/\s/.test(name)) return "Mode name cannot contain whitespace";
   if (isReservedModeName(name)) return `Mode name \"${name}\" is reserved`;
-  if (!opts?.allowExisting && existing[name])
-    return `Mode \"${name}\" already exists`;
+  if (!opts?.allowExisting && existing[name]) return `Mode \"${name}\" already exists`;
   return null;
 }
 
@@ -840,10 +771,7 @@ async function handleModeChoiceUI(
   await applyMode(pi, ctx, choice);
 }
 
-async function selectModeUI(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<void> {
+async function selectModeUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) return;
 
   while (true) {
@@ -911,14 +839,12 @@ async function pickModeWithDigitsUI(
         return;
       }
       if (matchesKey(data, Key.up) || matchesKey(data, "k")) {
-        selectedIndex =
-          selectedIndex === 0 ? items.length - 1 : selectedIndex - 1;
+        selectedIndex = selectedIndex === 0 ? items.length - 1 : selectedIndex - 1;
         refresh();
         return;
       }
       if (matchesKey(data, Key.down) || matchesKey(data, "j")) {
-        selectedIndex =
-          selectedIndex === items.length - 1 ? 0 : selectedIndex + 1;
+        selectedIndex = selectedIndex === items.length - 1 ? 0 : selectedIndex + 1;
         refresh();
         return;
       }
@@ -949,9 +875,7 @@ async function pickModeWithDigitsUI(
         const digit = i < 9 ? `${i + 1}.` : "  ";
         const pointer = isSelected ? theme.fg("accent", "> ") : "  ";
         const digitText = i < 9 ? theme.fg("dim", digit) : digit;
-        const body = isSelected
-          ? theme.fg("accent", label)
-          : theme.fg("text", label);
+        const body = isSelected ? theme.fg("accent", label) : theme.fg("text", label);
         add(`${pointer}${digitText} ${body}`);
       }
 
@@ -967,10 +891,7 @@ async function pickModeWithDigitsUI(
   });
 }
 
-async function configureModesUI(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<void> {
+async function configureModesUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) return;
 
   while (true) {
@@ -992,18 +913,12 @@ async function configureModesUI(
   }
 }
 
-async function addModeUI(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<string | undefined> {
+async function addModeUI(pi: ExtensionAPI, ctx: ExtensionContext): Promise<string | undefined> {
   if (!ctx.hasUI) return undefined;
   await ensureRuntime(pi, ctx);
 
   while (true) {
-    const raw = await ctx.ui.input(
-      "New mode name",
-      "e.g. docs, review, planning",
-    );
+    const raw = await ctx.ui.input("New mode name", "e.g. docs, review, planning");
     if (raw === undefined) return undefined;
 
     const name = normalizeModeNameInput(raw);
@@ -1026,11 +941,7 @@ async function addModeUI(
   }
 }
 
-async function editModeUI(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-  mode: string,
-): Promise<void> {
+async function editModeUI(pi: ExtensionAPI, ctx: ExtensionContext, mode: string): Promise<void> {
   if (!ctx.hasUI) return;
 
   let modeName = mode;
@@ -1041,9 +952,7 @@ async function editModeUI(
     if (!spec) return;
 
     const modelLabel =
-      spec.provider && spec.modelId
-        ? `${spec.provider}/${spec.modelId}`
-        : "(no model)";
+      spec.provider && spec.modelId ? `${spec.provider}/${spec.modelId}` : "(no model)";
     const thinkingLabel = spec.thinkingLevel ?? THINKING_UNSET_LABEL;
 
     const actions = ["Change name", "Change model", "Change thinking level"];
@@ -1082,7 +991,7 @@ async function editModeUI(
       if (level === undefined) continue;
 
       if (level === null) {
-        delete spec.thinkingLevel;
+        spec.thinkingLevel = undefined;
       } else {
         spec.thinkingLevel = level;
       }
@@ -1098,10 +1007,7 @@ async function editModeUI(
     }
 
     if (action === "Delete mode") {
-      const ok = await ctx.ui.confirm(
-        "Delete mode",
-        `Delete mode \"${modeName}\"?`,
-      );
+      const ok = await ctx.ui.confirm("Delete mode", `Delete mode \"${modeName}\"?`);
       if (!ok) continue;
 
       delete runtime.data.modes[modeName];
@@ -1161,11 +1067,7 @@ async function renameModeUI(
       continue;
     }
 
-    runtime.data.modes = renameModesRecord(
-      runtime.data.modes,
-      oldName,
-      newName,
-    );
+    runtime.data.modes = renameModesRecord(runtime.data.modes, oldName, newName);
     await persistRuntime(pi, ctx);
 
     if (runtime.currentMode === oldName) runtime.currentMode = newName;
@@ -1185,9 +1087,7 @@ async function pickModelForModeUI(
 
   const settingsManager = SettingsManager.inMemory();
   const currentModel =
-    spec.provider && spec.modelId
-      ? ctx.modelRegistry.find(spec.provider, spec.modelId)
-      : ctx.model;
+    spec.provider && spec.modelId ? ctx.modelRegistry.find(spec.provider, spec.modelId) : ctx.model;
 
   const scopedModels: Array<{ model: any; thinkingLevel: string }> = [];
 
@@ -1221,8 +1121,7 @@ async function pickThinkingLevelForModeUI(
   const choice = await ctx.ui.select("Thinking level", ordered);
   if (!choice) return undefined;
   if (choice === THINKING_UNSET_LABEL) return null;
-  if (ALL_THINKING_LEVELS.includes(choice as ThinkingLevel))
-    return choice as ThinkingLevel;
+  if (ALL_THINKING_LEVELS.includes(choice as ThinkingLevel)) return choice as ThinkingLevel;
   return undefined;
 }
 
@@ -1238,12 +1137,9 @@ async function cycleMode(
 
   // If we're currently in the overlay mode, cycle relative to the last real mode.
   const baseMode =
-    runtime.currentMode === CUSTOM_MODE_NAME
-      ? runtime.lastRealMode
-      : runtime.currentMode;
+    runtime.currentMode === CUSTOM_MODE_NAME ? runtime.lastRealMode : runtime.currentMode;
   const idx = Math.max(0, names.indexOf(baseMode));
-  const next =
-    names[(idx + direction + names.length) % names.length] ?? names[0]!;
+  const next = names[(idx + direction + names.length) % names.length] ?? names[0]!;
   await applyMode(pi, ctx, next);
 }
 
@@ -1283,7 +1179,7 @@ class PromptEditor extends CustomEditor {
     keybindings: ConstructorParameters<typeof CustomEditor>[2],
   ) {
     super(tui, theme, keybindings);
-    delete (this as { borderColor?: (text: string) => string }).borderColor;
+    (this as { borderColor?: (text: string) => string }).borderColor = undefined;
     Object.defineProperty(this, "borderColor", {
       get: () => this._borderColor ?? ((text: string) => text),
       set: (value: (text: string) => string) => {
@@ -1312,11 +1208,11 @@ class PromptEditor extends CustomEditor {
     const scrollPrefixMatch = topPlain.match(/^(─── ↑ \d+ more )/);
     const prefix = scrollPrefixMatch?.[1] ?? "──";
 
-    const labelColor =
-      this.modeLabelColor ?? ((text: string) => this.borderColor(text));
+    const labelColor = this.modeLabelColor ?? ((text: string) => this.borderColor(text));
     const isBashMode = this.getText().trimStart().startsWith("!");
-    const labelParts: Array<{ text: string; color: (text: string) => string }> =
-      [{ text: formatModeLabel(mode), color: labelColor }];
+    const labelParts: Array<{ text: string; color: (text: string) => string }> = [
+      { text: formatModeLabel(mode), color: labelColor },
+    ];
     if (isBashMode) {
       labelParts.push(
         { text: " ", color: labelColor },
@@ -1331,11 +1227,7 @@ class PromptEditor extends CustomEditor {
     const minRightBorder = 1; // keep at least one border cell on the right
     const maxLabelLen = Math.max(
       0,
-      width -
-        prefix.length -
-        labelLeftSpace.length -
-        labelRightSpace.length -
-        minRightBorder,
+      width - prefix.length - labelLeftSpace.length - labelRightSpace.length - minRightBorder,
     );
     if (maxLabelLen <= 0) return lines;
 
@@ -1357,8 +1249,7 @@ class PromptEditor extends CustomEditor {
       labelLen = maxLabelLen;
     }
 
-    const labelChunkLen =
-      labelLeftSpace.length + labelLen + labelRightSpace.length;
+    const labelChunkLen = labelLeftSpace.length + labelLen + labelRightSpace.length;
     const remaining = width - prefix.length - labelChunkLen;
     if (remaining < 0) return lines;
 
@@ -1369,19 +1260,15 @@ class PromptEditor extends CustomEditor {
     let decorationChunkWidth = 0;
     let decorationText = "";
     let decorationColor: ((s: string) => string) | null = null;
-    if (decoration && decoration.text) {
+    if (decoration?.text) {
       // Reserve " <text>──" on the right (1 cell left pad + 2 cell trailing fill).
       const decoLeftPad = 1;
       const decoRightFill = 2;
-      const maxDecoWidth = Math.max(
-        0,
-        remaining - decoLeftPad - decoRightFill,
-      );
+      const maxDecoWidth = Math.max(0, remaining - decoLeftPad - decoRightFill);
       if (maxDecoWidth > 0) {
         decorationText = truncateToWidth(decoration.text, maxDecoWidth);
         decorationColor = decoration.color;
-        decorationChunkWidth =
-          decoLeftPad + visibleWidth(decorationText) + decoRightFill;
+        decorationChunkWidth = decoLeftPad + visibleWidth(decorationText) + decoRightFill;
       }
     }
 
@@ -1391,9 +1278,7 @@ class PromptEditor extends CustomEditor {
       .join("");
     const coloredDecoration =
       decorationText && decorationColor
-        ? this.borderColor(" ") +
-          decorationColor(decorationText) +
-          this.borderColor("──")
+        ? this.borderColor(" ") + decorationColor(decorationText) + this.borderColor("──")
         : "";
     lines[0] =
       this.borderColor(prefix) +
@@ -1424,13 +1309,10 @@ function collectUserPromptsFromEntries(entries: Array<any>): PromptEntry[] {
   for (const entry of entries) {
     if (entry?.type !== "message") continue;
     const message = entry?.message;
-    if (!message || message.role !== "user" || !Array.isArray(message.content))
-      continue;
+    if (!message || message.role !== "user" || !Array.isArray(message.content)) continue;
     const text = extractText(message.content);
     if (!text) continue;
-    const timestamp = Number(
-      message.timestamp ?? entry.timestamp ?? Date.now(),
-    );
+    const timestamp = Number(message.timestamp ?? entry.timestamp ?? Date.now());
     prompts.push({ text, timestamp });
   }
 
@@ -1442,10 +1324,7 @@ function getSessionDirForCwd(cwd: string): string {
   return path.join(getGlobalAgentDir(), "sessions", safePath);
 }
 
-async function readTail(
-  filePath: string,
-  maxBytes = 256 * 1024,
-): Promise<string> {
+async function readTail(filePath: string, maxBytes = 256 * 1024): Promise<string> {
   let fileHandle: fs.FileHandle | undefined;
   try {
     const stats = await fs.stat(filePath);
@@ -1478,9 +1357,7 @@ async function loadPromptHistoryForCwd(
   excludeSessionFile?: string,
 ): Promise<PromptEntry[]> {
   const sessionDir = getSessionDirForCwd(path.resolve(cwd));
-  const resolvedExclude = excludeSessionFile
-    ? path.resolve(excludeSessionFile)
-    : undefined;
+  const resolvedExclude = excludeSessionFile ? path.resolve(excludeSessionFile) : undefined;
   const prompts: PromptEntry[] = [];
 
   let entries: Dirent[] = [];
@@ -1505,14 +1382,11 @@ async function loadPromptHistoryForCwd(
   );
 
   const sortedFiles = files
-    .filter((file): file is { filePath: string; mtimeMs: number } =>
-      Boolean(file),
-    )
+    .filter((file): file is { filePath: string; mtimeMs: number } => Boolean(file))
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
   for (const file of sortedFiles) {
-    if (resolvedExclude && path.resolve(file.filePath) === resolvedExclude)
-      continue;
+    if (resolvedExclude && path.resolve(file.filePath) === resolvedExclude) continue;
 
     const tail = await readTail(file.filePath);
     if (!tail) continue;
@@ -1526,17 +1400,10 @@ async function loadPromptHistoryForCwd(
       }
       if (entry?.type !== "message") continue;
       const message = entry?.message;
-      if (
-        !message ||
-        message.role !== "user" ||
-        !Array.isArray(message.content)
-      )
-        continue;
+      if (!message || message.role !== "user" || !Array.isArray(message.content)) continue;
       const text = extractText(message.content);
       if (!text) continue;
-      const timestamp = Number(
-        message.timestamp ?? entry.timestamp ?? Date.now(),
-      );
+      const timestamp = Number(message.timestamp ?? entry.timestamp ?? Date.now());
       prompts.push({ text, timestamp });
       if (prompts.length >= MAX_RECENT_PROMPTS) break;
     }
@@ -1606,15 +1473,13 @@ function parseBoolEnv(v: string | undefined): boolean {
 }
 
 function parseThreshold(v: unknown): number | undefined {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : Number.NaN;
   if (!Number.isFinite(n)) return undefined;
   if (n <= 0 || n >= 100) return undefined;
   return Math.round(n);
 }
 
-async function readBatteryConfigFile(
-  fp: string,
-): Promise<Record<string, unknown> | null> {
+async function readBatteryConfigFile(fp: string): Promise<Record<string, unknown> | null> {
   let raw: string;
   try {
     raw = await fs.readFile(fp, "utf8");
@@ -1629,9 +1494,7 @@ async function readBatteryConfigFile(
   try {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch (err) {
-    throw new Error(
-      `battery config: invalid JSON in ${fp}: ${(err as Error).message}`,
-    );
+    throw new Error(`battery config: invalid JSON in ${fp}: ${(err as Error).message}`);
   }
 }
 
@@ -1783,17 +1646,12 @@ let loadCounter = 0;
 function historiesMatch(a: PromptEntry[], b: PromptEntry[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i]?.text !== b[i]?.text || a[i]?.timestamp !== b[i]?.timestamp)
-      return false;
+    if (a[i]?.text !== b[i]?.text || a[i]?.timestamp !== b[i]?.timestamp) return false;
   }
   return true;
 }
 
-function setEditor(
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-  history: PromptEntry[],
-) {
+function setEditor(pi: ExtensionAPI, ctx: ExtensionContext, history: PromptEntry[]) {
   const uiTheme = ctx.ui.theme;
   ctx.ui.setEditorComponent((tui, theme, keybindings) => {
     const editor = new PromptEditor(tui, theme, keybindings);
@@ -1832,10 +1690,7 @@ function applyEditor(pi: ExtensionAPI, ctx: ExtensionContext) {
   setEditor(pi, ctx, immediateHistory);
 
   void (async () => {
-    const previousPrompts = await loadPromptHistoryForCwd(
-      ctx.cwd,
-      sessionFile ?? undefined,
-    );
+    const previousPrompts = await loadPromptHistoryForCwd(ctx.cwd, sessionFile ?? undefined);
     if (currentLoad !== loadCounter) return;
     if (ctx.ui.getEditorText() !== initialText) return;
     const history = buildHistoryList(currentPrompts, previousPrompts);
@@ -1871,23 +1726,18 @@ export default function (pi: ExtensionAPI) {
         if (!target) {
           if (!ctx.hasUI) return;
           const names = orderedModeNames(runtime.data.modes);
-          target = await ctx.ui.select(
-            "Store current selection into mode",
-            names,
-          );
+          target = await ctx.ui.select("Store current selection into mode", names);
           if (!target) return;
         }
 
         if (target === CUSTOM_MODE_NAME) {
-          if (ctx.hasUI)
-            ctx.ui.notify(`Cannot store into "${CUSTOM_MODE_NAME}"`, "warning");
+          if (ctx.hasUI) ctx.ui.notify(`Cannot store into "${CUSTOM_MODE_NAME}"`, "warning");
           return;
         }
 
         const selection = customOverlay ?? getCurrentSelectionSpec(pi, ctx);
         await storeSelectionIntoMode(pi, ctx, target, selection);
-        if (ctx.hasUI)
-          ctx.ui.notify(`Stored current selection into "${target}"`, "info");
+        if (ctx.hasUI) ctx.ui.notify(`Stored current selection into "${target}"`, "info");
         return;
       }
 

@@ -47,109 +47,109 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
-	const PATTERN = /!\{([^}]+)\}/g;
-	const TIMEOUT_MS = 30000;
-	const memo = new Map<string, string>();
+  const PATTERN = /!\{([^}]+)\}/g;
+  const TIMEOUT_MS = 30000;
+  const memo = new Map<string, string>();
 
-	pi.on("session_start", () => {
-		memo.clear();
-	});
+  pi.on("session_start", () => {
+    memo.clear();
+  });
 
-	async function expand(text: string, ctx?: ExtensionContext): Promise<string> {
-		if (!text.includes("!{")) return text;
-		const cached = memo.get(text);
-		if (cached !== undefined) return cached;
+  async function expand(text: string, ctx?: ExtensionContext): Promise<string> {
+    if (!text.includes("!{")) return text;
+    const cached = memo.get(text);
+    if (cached !== undefined) return cached;
 
-		PATTERN.lastIndex = 0;
-		const matches: Array<{ full: string; command: string }> = [];
-		let m: RegExpExecArray | null = PATTERN.exec(text);
-		while (m !== null) {
-			matches.push({ full: m[0], command: m[1] });
-			m = PATTERN.exec(text);
-		}
+    PATTERN.lastIndex = 0;
+    const matches: Array<{ full: string; command: string }> = [];
+    let m: RegExpExecArray | null = PATTERN.exec(text);
+    while (m !== null) {
+      matches.push({ full: m[0], command: m[1] });
+      m = PATTERN.exec(text);
+    }
 
-		let result = text;
-		const expansions: Array<{ command: string; output: string; error?: string }> = [];
-		for (const { full, command } of matches) {
-			try {
-				const r = await pi.exec("bash", ["-c", command], { timeout: TIMEOUT_MS });
-				const out = (r.stdout || r.stderr || "").trim();
-				if (r.code !== 0 && r.stderr) {
-					expansions.push({ command, output: out, error: `exit code ${r.code}` });
-				} else {
-					expansions.push({ command, output: out });
-				}
-				result = result.replace(full, out);
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : String(err);
-				expansions.push({ command, output: "", error: msg });
-				result = result.replace(full, `[error: ${msg}]`);
-			}
-		}
+    let result = text;
+    const expansions: Array<{ command: string; output: string; error?: string }> = [];
+    for (const { full, command } of matches) {
+      try {
+        const r = await pi.exec("bash", ["-c", command], { timeout: TIMEOUT_MS });
+        const out = (r.stdout || r.stderr || "").trim();
+        if (r.code !== 0 && r.stderr) {
+          expansions.push({ command, output: out, error: `exit code ${r.code}` });
+        } else {
+          expansions.push({ command, output: out });
+        }
+        result = result.replace(full, out);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        expansions.push({ command, output: "", error: msg });
+        result = result.replace(full, `[error: ${msg}]`);
+      }
+    }
 
-		if (ctx?.hasUI && expansions.length > 0) {
-			const summary = expansions
-				.map((e) => {
-					const status = e.error ? ` (${e.error})` : "";
-					const preview = e.output.length > 50 ? `${e.output.slice(0, 50)}...` : e.output;
-					return `!{${e.command}}${status} -> "${preview}"`;
-				})
-				.join("\n");
-			ctx.ui.notify(`Expanded ${expansions.length} inline command(s):\n${summary}`, "info");
-		}
+    if (ctx?.hasUI && expansions.length > 0) {
+      const summary = expansions
+        .map((e) => {
+          const status = e.error ? ` (${e.error})` : "";
+          const preview = e.output.length > 50 ? `${e.output.slice(0, 50)}...` : e.output;
+          return `!{${e.command}}${status} -> "${preview}"`;
+        })
+        .join("\n");
+      ctx.ui.notify(`Expanded ${expansions.length} inline command(s):\n${summary}`, "info");
+    }
 
-		memo.set(text, result);
-		return result;
-	}
+    memo.set(text, result);
+    return result;
+  }
 
-	// Path 1: user typed !{...} directly. Persists expanded text into session.
-	pi.on("input", async (event, ctx) => {
-		const text = event.text;
-		// Preserve whole-line `!command` (pi's built-in bash escape).
-		if (text.trimStart().startsWith("!") && !text.trimStart().startsWith("!{")) {
-			return { action: "continue" };
-		}
-		if (!text.includes("!{")) return { action: "continue" };
-		const expanded = await expand(text, ctx);
-		return expanded === text
-			? { action: "continue" }
-			: { action: "transform", text: expanded, images: event.images };
-	});
+  // Path 1: user typed !{...} directly. Persists expanded text into session.
+  pi.on("input", async (event, ctx) => {
+    const text = event.text;
+    // Preserve whole-line `!command` (pi's built-in bash escape).
+    if (text.trimStart().startsWith("!") && !text.trimStart().startsWith("!{")) {
+      return { action: "continue" };
+    }
+    if (!text.includes("!{")) return { action: "continue" };
+    const expanded = await expand(text, ctx);
+    return expanded === text
+      ? { action: "continue" }
+      : { action: "transform", text: expanded, images: event.images };
+  });
 
-	// Path 2: template-expanded bodies (e.g. /commit) become visible at `context`.
-	pi.on("context", async (event, ctx) => {
-		const messages = event.messages;
-		let touched = false;
-		for (const msg of messages) {
-			if (msg.role !== "user") continue;
-			const content = msg.content;
-			if (typeof content === "string") {
-				if (!content.includes("!{")) continue;
-				const expanded = await expand(content, ctx);
-				if (expanded !== content) {
-					msg.content = expanded;
-					touched = true;
-				}
-			} else if (Array.isArray(content)) {
-				for (const c of content) {
-					if (
-						c &&
-						typeof c === "object" &&
-						"type" in c &&
-						c.type === "text" &&
-						typeof (c as { text: unknown }).text === "string" &&
-						(c as { text: string }).text.includes("!{")
-					) {
-						const block = c as { type: "text"; text: string };
-						const expanded = await expand(block.text, ctx);
-						if (expanded !== block.text) {
-							block.text = expanded;
-							touched = true;
-						}
-					}
-				}
-			}
-		}
-		return touched ? { messages } : undefined;
-	});
+  // Path 2: template-expanded bodies (e.g. /commit) become visible at `context`.
+  pi.on("context", async (event, ctx) => {
+    const messages = event.messages;
+    let touched = false;
+    for (const msg of messages) {
+      if (msg.role !== "user") continue;
+      const content = msg.content;
+      if (typeof content === "string") {
+        if (!content.includes("!{")) continue;
+        const expanded = await expand(content, ctx);
+        if (expanded !== content) {
+          msg.content = expanded;
+          touched = true;
+        }
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (
+            c &&
+            typeof c === "object" &&
+            "type" in c &&
+            c.type === "text" &&
+            typeof (c as { text: unknown }).text === "string" &&
+            (c as { text: string }).text.includes("!{")
+          ) {
+            const block = c as { type: "text"; text: string };
+            const expanded = await expand(block.text, ctx);
+            if (expanded !== block.text) {
+              block.text = expanded;
+              touched = true;
+            }
+          }
+        }
+      }
+    }
+    return touched ? { messages } : undefined;
+  });
 }

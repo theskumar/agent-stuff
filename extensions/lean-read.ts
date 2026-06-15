@@ -39,15 +39,12 @@
  * case to shell out to `lean-ctx`.
  */
 
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
-import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname, isAbsolute, resolve as resolvePath } from "node:path";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 // ---------------------------------------------------------------------------
 // Thresholds (mirrors pi-lean-ctx defaults)
@@ -115,17 +112,12 @@ const readSchema = Type.Object({
       description: "Line number to start reading from (1-indexed).",
     }),
   ),
-  limit: Type.Optional(
-    Type.Number({ description: "Maximum number of lines to read." }),
-  ),
+  limit: Type.Optional(Type.Number({ description: "Maximum number of lines to read." })),
   mode: Type.Optional(
-    Type.Union(
-      [Type.Literal("full"), Type.Literal("map"), Type.Literal("signatures")],
-      {
-        description:
-          "Override auto-select: full (complete content), map (deps + API signatures), signatures (AST only).",
-      },
-    ),
+    Type.Union([Type.Literal("full"), Type.Literal("map"), Type.Literal("signatures")], {
+      description:
+        "Override auto-select: full (complete content), map (deps + API signatures), signatures (AST only).",
+    }),
   ),
 });
 
@@ -154,9 +146,7 @@ function resolveBinary(): string | null {
   return null;
 }
 
-async function chooseMode(
-  absPath: string,
-): Promise<"full" | "map" | "signatures"> {
+async function chooseMode(absPath: string): Promise<"full" | "map" | "signatures"> {
   const ext = extname(absPath).toLowerCase();
   if (FULL_READ_EXTS.has(ext)) return "full";
   try {
@@ -186,8 +176,7 @@ export default function (pi: ExtensionAPI) {
     label: "read",
     description:
       "Read file contents. Auto-compresses via lean-ctx: small files/configs → full content, medium code (8-96KB) → map (deps + API signatures), large code (>=96KB) → signatures (AST only). Use mode=full to force full content. Supports offset/limit for line ranges. Images fall back to native read.",
-    promptSnippet:
-      "Read file contents with automatic compression for large code files.",
+    promptSnippet: "Read file contents with automatic compression for large code files.",
     promptGuidelines: [
       "Use read for file inspection instead of cat/head/tail via bash.",
       "For large code files, the default `map` or `signatures` mode is usually enough to understand structure. Use mode=full only when you need to edit or inspect details.",
@@ -195,19 +184,11 @@ export default function (pi: ExtensionAPI) {
     ],
     parameters: readSchema,
 
-    async execute(
-      toolCallId,
-      params: Params,
-      signal,
-      onUpdate,
-      ctx: ExtensionContext,
-    ) {
+    async execute(toolCallId, params: Params, signal, onUpdate, ctx: ExtensionContext) {
       const cwd = ctx.cwd;
       const native = createReadToolDefinition(cwd);
       const requested = normalizePath(params.path);
-      const abs = isAbsolute(requested)
-        ? resolvePath(requested)
-        : resolvePath(cwd, requested);
+      const abs = isAbsolute(requested) ? resolvePath(requested) : resolvePath(cwd, requested);
       const ext = extname(abs).toLowerCase();
 
       // Images and missing binary: native handles it.
@@ -257,7 +238,7 @@ export default function (pi: ExtensionAPI) {
     // identical to a normal read in the TUI.
     renderCall(args, theme, context) {
       const native = createReadToolDefinition(context.cwd);
-      return native.renderCall!(args as any, theme, context as any);
+      return native.renderCall?.(args as any, theme, context as any);
     },
   });
 }

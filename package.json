@@ -1,0 +1,11 @@
+{
+  "name": "agent-stuff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fix": "biome check --write extensions"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4"
+  }
+}

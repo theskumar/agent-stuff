@@ -36,22 +36,18 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  SessionEntry,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import {
   Container,
-  fuzzyFilter,
   Input,
-  matchesKey,
   type SelectItem,
   SelectList,
   Spacer,
-  Text,
   type TUI,
+  Text,
+  fuzzyFilter,
+  matchesKey,
 } from "@earendil-works/pi-tui";
 
 type ContentBlock = {
@@ -125,14 +121,7 @@ const extractPathsFromToolArgs = (args: unknown): string[] => {
 
   const refs: string[] = [];
   const record = args as Record<string, unknown>;
-  const directKeys = [
-    "path",
-    "file",
-    "filePath",
-    "filepath",
-    "fileName",
-    "filename",
-  ] as const;
+  const directKeys = ["path", "file", "filePath", "filepath", "fileName", "filename"] as const;
   const listKeys = ["paths", "files", "filePaths"] as const;
 
   for (const key of directKeys) {
@@ -207,15 +196,11 @@ const sanitizeReference = (raw: string): string => {
   return value;
 };
 
-const isCommentLikeReference = (value: string): boolean =>
-  value.startsWith("//");
+const isCommentLikeReference = (value: string): boolean => value.startsWith("//");
 
 const stripLineSuffix = (value: string): string => {
   let result = value.replace(/#L\d+(C\d+)?$/i, "");
-  const lastSeparator = Math.max(
-    result.lastIndexOf("/"),
-    result.lastIndexOf("\\"),
-  );
+  const lastSeparator = Math.max(result.lastIndexOf("/"), result.lastIndexOf("\\"));
   const segmentStart = lastSeparator >= 0 ? lastSeparator + 1 : 0;
   const segment = result.slice(segmentStart);
   const colonIndex = segment.indexOf(":");
@@ -317,10 +302,7 @@ const collectRecentFileReferences = (
   return results;
 };
 
-const findLatestFileReference = (
-  entries: SessionEntry[],
-  cwd: string,
-): FileReference | null => {
+const findLatestFileReference = (entries: SessionEntry[], cwd: string): FileReference | null => {
   const refs = collectRecentFileReferences(entries, cwd, 100);
   return refs.find((ref) => ref.exists) ?? null;
 };
@@ -427,13 +409,9 @@ const collectSessionFileChanges = (
   return fileMap;
 };
 
-const splitNullSeparated = (value: string): string[] =>
-  value.split("\0").filter(Boolean);
+const splitNullSeparated = (value: string): string[] => value.split("\0").filter(Boolean);
 
-const getGitRoot = async (
-  pi: ExtensionAPI,
-  cwd: string,
-): Promise<string | null> => {
+const getGitRoot = async (pi: ExtensionAPI, cwd: string): Promise<string | null> => {
   const result = await pi.exec("git", ["rev-parse", "--show-toplevel"], {
     cwd,
   });
@@ -470,9 +448,7 @@ const getGitStatusMap = async (
     }
     if (!filePath) continue;
 
-    const resolved = path.isAbsolute(filePath)
-      ? filePath
-      : path.resolve(cwd, filePath);
+    const resolved = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
     const canonical = toCanonicalPathMaybeMissing(resolved);
     if (!canonical) continue;
     statusMap.set(canonical.canonicalPath, {
@@ -550,8 +526,7 @@ const buildFileEntries = async (
     data: Partial<FileEntry> & { canonicalPath: string; isDirectory: boolean },
   ) => {
     const existing = fileMap.get(data.canonicalPath);
-    const displayPath =
-      data.displayPath ?? formatDisplayPath(data.canonicalPath, ctx.cwd);
+    const displayPath = data.displayPath ?? formatDisplayPath(data.canonicalPath, ctx.cwd);
 
     if (existing) {
       fileMap.set(data.canonicalPath, {
@@ -563,12 +538,8 @@ const buildFileEntries = async (
         isReferenced: existing.isReferenced || data.isReferenced === true,
         inRepo: existing.inRepo || data.inRepo === true,
         isTracked: existing.isTracked || data.isTracked === true,
-        hasSessionChange:
-          existing.hasSessionChange || data.hasSessionChange === true,
-        lastTimestamp: Math.max(
-          existing.lastTimestamp,
-          data.lastTimestamp ?? 0,
-        ),
+        hasSessionChange: existing.hasSessionChange || data.hasSessionChange === true,
+        lastTimestamp: Math.max(existing.lastTimestamp, data.lastTimestamp ?? 0),
       });
       return;
     }
@@ -621,9 +592,7 @@ const buildFileEntries = async (
     });
   }
 
-  const references = collectRecentFileReferences(entries, ctx.cwd, 200).filter(
-    (ref) => ref.exists,
-  );
+  const references = collectRecentFileReferences(entries, ctx.cwd, 200).filter((ref) => ref.exists);
   for (const ref of references) {
     const canonical = toCanonicalPath(ref.path);
     if (!canonical) continue;
@@ -719,14 +688,7 @@ const getEditableContent = (target: FileEntry): EditCheckResult => {
   return { allowed: true, content: buffer.toString("utf8") };
 };
 
-type FileAction =
-  | "reveal"
-  | "quicklook"
-  | "open"
-  | "edit"
-  | "addToPrompt"
-  | "diff"
-  | "delete";
+type FileAction = "reveal" | "quicklook" | "open" | "edit" | "addToPrompt" | "diff" | "delete";
 
 const showActionSelector = async (
   ctx: ExtensionContext,
@@ -742,21 +704,15 @@ const showActionSelector = async (
     { value: "reveal", label: "Reveal in Finder" },
     { value: "open", label: "Open" },
     { value: "addToPrompt", label: "Add to prompt" },
-    ...(options.canQuickLook
-      ? [{ value: "quicklook", label: "Open in Quick Look" }]
-      : []),
+    ...(options.canQuickLook ? [{ value: "quicklook", label: "Open in Quick Look" }] : []),
     ...(options.canEdit ? [{ value: "edit", label: "Edit" }] : []),
-    ...(options.canDelete
-      ? [{ value: "delete", label: "Delete (move to Trash)" }]
-      : []),
+    ...(options.canDelete ? [{ value: "delete", label: "Delete (move to Trash)" }] : []),
   ];
 
   return ctx.ui.custom<FileAction | null>((tui, theme, _kb, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-    container.addChild(
-      new Text(theme.fg("accent", theme.bold("Choose action"))),
-    );
+    container.addChild(new Text(theme.fg("accent", theme.bold("Choose action"))));
 
     const selectList = new SelectList(actions, actions.length, {
       selectedPrefix: (text) => theme.fg("accent", text),
@@ -770,9 +726,7 @@ const showActionSelector = async (
     selectList.onCancel = () => done(null);
 
     container.addChild(selectList);
-    container.addChild(
-      new Text(theme.fg("dim", "Press enter to confirm or esc to cancel")),
-    );
+    container.addChild(new Text(theme.fg("dim", "Press enter to confirm or esc to cancel")));
     container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
     return {
@@ -803,17 +757,12 @@ const openPath = async (
   const command = process.platform === "darwin" ? "open" : "xdg-open";
   const result = await pi.exec(command, [target.resolvedPath]);
   if (result.code !== 0) {
-    const errorMessage =
-      result.stderr?.trim() || `Failed to open ${target.displayPath}`;
+    const errorMessage = result.stderr?.trim() || `Failed to open ${target.displayPath}`;
     ctx.ui.notify(errorMessage, "error");
   }
 };
 
-const openExternalEditor = (
-  tui: TUI,
-  editorCmd: string,
-  content: string,
-): string | null => {
+const openExternalEditor = (tui: TUI, editorCmd: string, content: string): string | null => {
   const tmpFile = path.join(os.tmpdir(), `pi-files-edit-${Date.now()}.txt`);
 
   try {
@@ -850,18 +799,16 @@ const editPath = async (
     return;
   }
 
-  const updated = await ctx.ui.custom<string | null>(
-    (tui, theme, _kb, done) => {
-      const status = new Text(theme.fg("dim", `Opening ${editorCmd}...`));
+  const updated = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
+    const status = new Text(theme.fg("dim", `Opening ${editorCmd}...`));
 
-      queueMicrotask(() => {
-        const result = openExternalEditor(tui, editorCmd, content);
-        done(result);
-      });
+    queueMicrotask(() => {
+      const result = openExternalEditor(tui, editorCmd, content);
+      done(result);
+    });
 
-      return status;
-    },
-  );
+    return status;
+  });
 
   if (updated === null) {
     ctx.ui.notify("Edit cancelled", "info");
@@ -885,8 +832,7 @@ const revealPath = async (
     return;
   }
 
-  const isDirectory =
-    target.isDirectory || statSync(target.resolvedPath).isDirectory();
+  const isDirectory = target.isDirectory || statSync(target.resolvedPath).isDirectory();
   let command = "open";
   let args: string[] = [];
 
@@ -894,15 +840,12 @@ const revealPath = async (
     args = isDirectory ? [target.resolvedPath] : ["-R", target.resolvedPath];
   } else {
     command = "xdg-open";
-    args = [
-      isDirectory ? target.resolvedPath : path.dirname(target.resolvedPath),
-    ];
+    args = [isDirectory ? target.resolvedPath : path.dirname(target.resolvedPath)];
   }
 
   const result = await pi.exec(command, args);
   if (result.code !== 0) {
-    const errorMessage =
-      result.stderr?.trim() || `Failed to reveal ${target.displayPath}`;
+    const errorMessage = result.stderr?.trim() || `Failed to reveal ${target.displayPath}`;
     ctx.ui.notify(errorMessage, "error");
   }
 };
@@ -922,8 +865,7 @@ const quickLookPath = async (
     return;
   }
 
-  const isDirectory =
-    target.isDirectory || statSync(target.resolvedPath).isDirectory();
+  const isDirectory = target.isDirectory || statSync(target.resolvedPath).isDirectory();
   if (isDirectory) {
     ctx.ui.notify("Quick Look only works on files", "warning");
     return;
@@ -931,8 +873,7 @@ const quickLookPath = async (
 
   const result = await pi.exec("qlmanage", ["-p", target.resolvedPath]);
   if (result.code !== 0) {
-    const errorMessage =
-      result.stderr?.trim() || `Failed to Quick Look ${target.displayPath}`;
+    const errorMessage = result.stderr?.trim() || `Failed to Quick Look ${target.displayPath}`;
     ctx.ui.notify(errorMessage, "error");
   }
 };
@@ -948,25 +889,19 @@ const openDiff = async (
     return;
   }
 
-  const relativePath = path
-    .relative(gitRoot, target.resolvedPath)
-    .split(path.sep)
-    .join("/");
+  const relativePath = path.relative(gitRoot, target.resolvedPath).split(path.sep).join("/");
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), "pi-files-"));
   const tmpFile = path.join(tmpDir, path.basename(target.displayPath));
 
-  const existsInHead = await pi.exec(
-    "git",
-    ["cat-file", "-e", `HEAD:${relativePath}`],
-    { cwd: gitRoot },
-  );
+  const existsInHead = await pi.exec("git", ["cat-file", "-e", `HEAD:${relativePath}`], {
+    cwd: gitRoot,
+  });
   if (existsInHead.code === 0) {
     const result = await pi.exec("git", ["show", `HEAD:${relativePath}`], {
       cwd: gitRoot,
     });
     if (result.code !== 0) {
-      const errorMessage =
-        result.stderr?.trim() || `Failed to diff ${target.displayPath}`;
+      const errorMessage = result.stderr?.trim() || `Failed to diff ${target.displayPath}`;
       ctx.ui.notify(errorMessage, "error");
       return;
     }
@@ -977,10 +912,7 @@ const openDiff = async (
 
   let workingPath = target.resolvedPath;
   if (!existsSync(target.resolvedPath)) {
-    workingPath = path.join(
-      tmpDir,
-      `pi-files-working-${path.basename(target.displayPath)}`,
-    );
+    workingPath = path.join(tmpDir, `pi-files-working-${path.basename(target.displayPath)}`);
     writeFileSync(workingPath, "", "utf8");
   }
 
@@ -989,16 +921,12 @@ const openDiff = async (
   });
   if (openResult.code !== 0) {
     const errorMessage =
-      openResult.stderr?.trim() ||
-      `Failed to open diff for ${target.displayPath}`;
+      openResult.stderr?.trim() || `Failed to open diff for ${target.displayPath}`;
     ctx.ui.notify(errorMessage, "error");
   }
 };
 
-const confirmDelete = async (
-  ctx: ExtensionContext,
-  target: FileEntry,
-): Promise<boolean> => {
+const confirmDelete = async (ctx: ExtensionContext, target: FileEntry): Promise<boolean> => {
   const label = target.isDirectory ? "directory" : "file";
   return ctx.ui.custom<boolean>((tui, theme, _kb, done) => {
     const items: SelectItem[] = [
@@ -1008,9 +936,7 @@ const confirmDelete = async (
 
     const container = new Container();
     container.addChild(new DynamicBorder((str) => theme.fg("warning", str)));
-    container.addChild(
-      new Text(theme.fg("warning", theme.bold(`Delete ${label}?`))),
-    );
+    container.addChild(new Text(theme.fg("warning", theme.bold(`Delete ${label}?`))));
     container.addChild(new Text(theme.fg("muted", target.displayPath)));
     container.addChild(new Spacer(1));
 
@@ -1026,9 +952,7 @@ const confirmDelete = async (
     selectList.onCancel = () => done(false);
 
     container.addChild(selectList);
-    container.addChild(
-      new Text(theme.fg("dim", "enter to confirm • esc to cancel")),
-    );
+    container.addChild(new Text(theme.fg("dim", "enter to confirm • esc to cancel")));
     container.addChild(new DynamicBorder((str) => theme.fg("warning", str)));
 
     return {
@@ -1063,14 +987,11 @@ const deletePath = async (
   }
 
   if (process.platform === "darwin") {
-    const escaped = target.resolvedPath
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"');
+    const escaped = target.resolvedPath.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const script = `tell application "Finder" to delete POSIX file "${escaped}"`;
     const result = await pi.exec("osascript", ["-e", script]);
     if (result.code !== 0) {
-      const errorMessage =
-        result.stderr?.trim() || `Failed to delete ${target.displayPath}`;
+      const errorMessage = result.stderr?.trim() || `Failed to delete ${target.displayPath}`;
       ctx.ui.notify(errorMessage, "error");
       return false;
     }
@@ -1084,13 +1005,10 @@ const deletePath = async (
     return true;
   }
 
-  const rmArgs = target.isDirectory
-    ? ["-rf", target.resolvedPath]
-    : [target.resolvedPath];
+  const rmArgs = target.isDirectory ? ["-rf", target.resolvedPath] : [target.resolvedPath];
   const rmResult = await pi.exec("rm", rmArgs);
   if (rmResult.code !== 0) {
-    const errorMessage =
-      rmResult.stderr?.trim() || `Failed to delete ${target.displayPath}`;
+    const errorMessage = rmResult.stderr?.trim() || `Failed to delete ${target.displayPath}`;
     ctx.ui.notify(errorMessage, "error");
     return false;
   }
@@ -1123,137 +1041,116 @@ const showFileSelector = async (
   });
 
   let quickAction: "diff" | null = null;
-  const selection = await ctx.ui.custom<string | null>(
-    (tui, theme, keybindings, done) => {
-      const container = new Container();
-      container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-      container.addChild(
-        new Text(theme.fg("accent", theme.bold(" Select file")), 0, 0),
-      );
+  const selection = await ctx.ui.custom<string | null>((tui, theme, keybindings, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+    container.addChild(new Text(theme.fg("accent", theme.bold(" Select file")), 0, 0));
 
-      const searchInput = new Input();
-      container.addChild(searchInput);
-      container.addChild(new Spacer(1));
+    const searchInput = new Input();
+    container.addChild(searchInput);
+    container.addChild(new Spacer(1));
 
-      const listContainer = new Container();
-      container.addChild(listContainer);
-      container.addChild(
-        new Text(
-          theme.fg(
-            "dim",
-            "Type to filter • enter to select • ctrl+shift+d diff • esc to cancel",
-          ),
-          0,
-          0,
-        ),
-      );
-      container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+    const listContainer = new Container();
+    container.addChild(listContainer);
+    container.addChild(
+      new Text(
+        theme.fg("dim", "Type to filter • enter to select • ctrl+shift+d diff • esc to cancel"),
+        0,
+        0,
+      ),
+    );
+    container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
-      let filteredItems = items;
-      let selectList: SelectList | null = null;
+    let filteredItems = items;
+    let selectList: SelectList | null = null;
 
-      const updateList = () => {
-        listContainer.clear();
-        if (filteredItems.length === 0) {
-          listContainer.addChild(
-            new Text(theme.fg("warning", "  No matching files"), 0, 0),
-          );
-          selectList = null;
+    const updateList = () => {
+      listContainer.clear();
+      if (filteredItems.length === 0) {
+        listContainer.addChild(new Text(theme.fg("warning", "  No matching files"), 0, 0));
+        selectList = null;
+        return;
+      }
+
+      selectList = new SelectList(filteredItems, Math.min(filteredItems.length, 12), {
+        selectedPrefix: (text) => theme.fg("accent", text),
+        selectedText: (text) => theme.fg("accent", text),
+        description: (text) => theme.fg("muted", text),
+        scrollInfo: (text) => theme.fg("dim", text),
+        noMatch: (text) => theme.fg("warning", text),
+      });
+
+      if (selectedPath) {
+        const index = filteredItems.findIndex((item) => item.value === selectedPath);
+        if (index >= 0) {
+          selectList.setSelectedIndex(index);
+        }
+      }
+
+      selectList.onSelect = (item) => done(item.value as string);
+      selectList.onCancel = () => done(null);
+
+      listContainer.addChild(selectList);
+    };
+
+    const applyFilter = () => {
+      const query = searchInput.getValue();
+      filteredItems = query
+        ? fuzzyFilter(
+            items,
+            query,
+            (item) => `${item.label} ${item.value} ${item.description ?? ""}`,
+          )
+        : items;
+      updateList();
+    };
+
+    applyFilter();
+
+    return {
+      render(width: number) {
+        return container.render(width);
+      },
+      invalidate() {
+        container.invalidate();
+      },
+      handleInput(data: string) {
+        if (matchesKey(data, "ctrl+shift+d")) {
+          const selected = selectList?.getSelectedItem();
+          if (selected) {
+            const file = files.find((entry) => entry.canonicalPath === selected.value);
+            const canDiff = file?.isTracked && !file.isDirectory && Boolean(gitRoot);
+            if (!canDiff) {
+              ctx.ui.notify("Diff is only available for tracked files", "warning");
+              return;
+            }
+            quickAction = "diff";
+            done(selected.value as string);
+            return;
+          }
+        }
+
+        if (
+          keybindings.matches(data, "tui.select.up") ||
+          keybindings.matches(data, "tui.select.down") ||
+          keybindings.matches(data, "tui.select.confirm") ||
+          keybindings.matches(data, "tui.select.cancel")
+        ) {
+          if (selectList) {
+            selectList.handleInput(data);
+          } else if (keybindings.matches(data, "tui.select.cancel")) {
+            done(null);
+          }
+          tui.requestRender();
           return;
         }
 
-        selectList = new SelectList(
-          filteredItems,
-          Math.min(filteredItems.length, 12),
-          {
-            selectedPrefix: (text) => theme.fg("accent", text),
-            selectedText: (text) => theme.fg("accent", text),
-            description: (text) => theme.fg("muted", text),
-            scrollInfo: (text) => theme.fg("dim", text),
-            noMatch: (text) => theme.fg("warning", text),
-          },
-        );
-
-        if (selectedPath) {
-          const index = filteredItems.findIndex(
-            (item) => item.value === selectedPath,
-          );
-          if (index >= 0) {
-            selectList.setSelectedIndex(index);
-          }
-        }
-
-        selectList.onSelect = (item) => done(item.value as string);
-        selectList.onCancel = () => done(null);
-
-        listContainer.addChild(selectList);
-      };
-
-      const applyFilter = () => {
-        const query = searchInput.getValue();
-        filteredItems = query
-          ? fuzzyFilter(
-              items,
-              query,
-              (item) => `${item.label} ${item.value} ${item.description ?? ""}`,
-            )
-          : items;
-        updateList();
-      };
-
-      applyFilter();
-
-      return {
-        render(width: number) {
-          return container.render(width);
-        },
-        invalidate() {
-          container.invalidate();
-        },
-        handleInput(data: string) {
-          if (matchesKey(data, "ctrl+shift+d")) {
-            const selected = selectList?.getSelectedItem();
-            if (selected) {
-              const file = files.find(
-                (entry) => entry.canonicalPath === selected.value,
-              );
-              const canDiff =
-                file?.isTracked && !file.isDirectory && Boolean(gitRoot);
-              if (!canDiff) {
-                ctx.ui.notify(
-                  "Diff is only available for tracked files",
-                  "warning",
-                );
-                return;
-              }
-              quickAction = "diff";
-              done(selected.value as string);
-              return;
-            }
-          }
-
-          if (
-            keybindings.matches(data, "tui.select.up") ||
-            keybindings.matches(data, "tui.select.down") ||
-            keybindings.matches(data, "tui.select.confirm") ||
-            keybindings.matches(data, "tui.select.cancel")
-          ) {
-            if (selectList) {
-              selectList.handleInput(data);
-            } else if (keybindings.matches(data, "tui.select.cancel")) {
-              done(null);
-            }
-            tui.requestRender();
-            return;
-          }
-
-          searchInput.handleInput(data);
-          applyFilter();
-          tui.requestRender();
-        },
-      };
-    },
-  );
+        searchInput.handleInput(data);
+        applyFilter();
+        tui.requestRender();
+      },
+    };
+  });
 
   const selected = selection
     ? (files.find((file) => file.canonicalPath === selection) ?? null)
@@ -1261,10 +1158,7 @@ const showFileSelector = async (
   return { selected, quickAction };
 };
 
-const runFileBrowser = async (
-  pi: ExtensionAPI,
-  ctx: ExtensionContext,
-): Promise<void> => {
+const runFileBrowser = async (pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> => {
   if (!ctx.hasUI) {
     ctx.ui.notify("Files requires interactive mode", "error");
     return;
@@ -1278,12 +1172,7 @@ const runFileBrowser = async (
 
   let lastSelectedPath: string | null = null;
   while (true) {
-    const { selected, quickAction } = await showFileSelector(
-      ctx,
-      files,
-      lastSelectedPath,
-      gitRoot,
-    );
+    const { selected, quickAction } = await showFileSelector(ctx, files, lastSelectedPath, gitRoot);
     if (!selected) {
       ctx.ui.notify("Files cancelled", "info");
       return;
@@ -1293,8 +1182,7 @@ const runFileBrowser = async (
 
     const canQuickLook = process.platform === "darwin" && !selected.isDirectory;
     const editCheck = getEditableContent(selected);
-    const canDiff =
-      selected.isTracked && !selected.isDirectory && Boolean(gitRoot);
+    const canDiff = selected.isTracked && !selected.isDirectory && Boolean(gitRoot);
     const canDelete = selected.exists;
 
     if (quickAction === "diff") {

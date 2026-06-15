@@ -46,10 +46,10 @@
  * blocks disallowed invocations at bash spawn time.
  */
 
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createBashTool } from "@earendil-works/pi-coding-agent";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const interceptedCommandsPath = join(__dirname, "..", "intercepted-commands");

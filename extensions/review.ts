@@ -52,24 +52,24 @@
  * Note: PR review requires a clean working tree (no uncommitted changes to tracked files).
  */
 
+import { Buffer } from "node:buffer";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import type {
   ExtensionAPI,
-  ExtensionContext,
   ExtensionCommandContext,
+  ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { DynamicBorder, BorderedLoader } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader, DynamicBorder } from "@earendil-works/pi-coding-agent";
 import {
   Container,
-  fuzzyFilter,
   Input,
   type SelectItem,
   SelectList,
   Spacer,
   Text,
+  fuzzyFilter,
 } from "@earendil-works/pi-tui";
-import path from "node:path";
-import { promises as fs } from "node:fs";
-import { Buffer } from "node:buffer";
 
 // State to track fresh session review (where we branched from).
 // Module-level state means only one review can be active at a time.
@@ -175,9 +175,7 @@ function applyReviewSettings(ctx: ExtensionContext) {
   reviewCustomInstructions = state.customInstructions?.trim() || undefined;
 }
 
-function parseMarkdownHeading(
-  line: string,
-): { level: number; title: string } | null {
+function parseMarkdownHeading(line: string): { level: number; title: string } | null {
   const headingMatch = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
   if (!headingMatch) {
     return null;
@@ -190,9 +188,7 @@ function parseMarkdownHeading(
   };
 }
 
-function getFindingsSectionBounds(
-  lines: string[],
-): { start: number; end: number } | null {
+function getFindingsSectionBounds(lines: string[]): { start: number; end: number } | null {
   let start = -1;
   let findingsHeadingLevel: number | null = null;
 
@@ -233,10 +229,7 @@ function getFindingsSectionBounds(
         continue;
       }
 
-      if (
-        findingsHeadingLevel !== null &&
-        heading.level <= findingsHeadingLevel
-      ) {
+      if (findingsHeadingLevel !== null && heading.level <= findingsHeadingLevel) {
         end = i;
         break;
       }
@@ -323,9 +316,7 @@ function hasNeedsAttentionVerdict(messageText: string): boolean {
   const lines = messageText.split(/\r?\n/);
 
   for (const line of lines) {
-    const inlineMatch = line.match(
-      /^\s*(?:[*-+]\s*)?(?:overall\s+)?verdict\s*:\s*(.+)$/i,
-    );
+    const inlineMatch = line.match(/^\s*(?:[*-+]\s*)?(?:overall\s+)?verdict\s*:\s*(.+)$/i);
     if (inlineMatch && isNeedsAttentionVerdictValue(inlineMatch[1])) {
       return true;
     }
@@ -350,9 +341,7 @@ function hasNeedsAttentionVerdict(messageText: string): boolean {
       const verdictLine = lines[j];
       const nextHeading = parseMarkdownHeading(verdictLine);
       if (nextHeading) {
-        const normalizedNextHeading = nextHeading.title
-          .replace(/[*_`]/g, "")
-          .trim();
+        const normalizedNextHeading = nextHeading.title.replace(/[*_`]/g, "").trim();
         if (verdictLevel === null || nextHeading.level <= verdictLevel) {
           break;
         }
@@ -821,9 +810,7 @@ function selectRulesForChangedFiles(changedFiles: string[]): string {
     return "";
   }
 
-  const paths = changedFiles
-    .map(normalizeReviewPath)
-    .filter((p) => p.length > 0);
+  const paths = changedFiles.map(normalizeReviewPath).filter((p) => p.length > 0);
   if (paths.length === 0) {
     return "";
   }
@@ -892,8 +879,8 @@ function parsePorcelainPaths(stdout: string): string[] {
 function parseShortstatLineCount(shortstat: string): number {
   const insertions = shortstat.match(/(\d+)\s+insertion/);
   const deletions = shortstat.match(/(\d+)\s+deletion/);
-  const ins = insertions ? parseInt(insertions[1], 10) : 0;
-  const del = deletions ? parseInt(deletions[1], 10) : 0;
+  const ins = insertions ? Number.parseInt(insertions[1], 10) : 0;
+  const del = deletions ? Number.parseInt(deletions[1], 10) : 0;
   return (Number.isFinite(ins) ? ins : 0) + (Number.isFinite(del) ? del : 0);
 }
 
@@ -923,11 +910,7 @@ async function getChangedFilesForTarget(
     case "baseBranch":
     case "pullRequest": {
       if (!mergeBase) return [];
-      const { stdout, code } = await pi.exec("git", [
-        "diff",
-        "--name-only",
-        mergeBase,
-      ]);
+      const { stdout, code } = await pi.exec("git", ["diff", "--name-only", mergeBase]);
       if (code !== 0) return [];
       return splitGitLines(stdout);
     }
@@ -986,8 +969,7 @@ async function collectDiffContext(
       ? pi.exec("git", ["ls-files", "--others", "--exclude-standard"])
       : Promise.resolve(null),
   ]);
-  const lineCount =
-    shortstat.code === 0 ? parseShortstatLineCount(shortstat.stdout) : 0;
+  const lineCount = shortstat.code === 0 ? parseShortstatLineCount(shortstat.stdout) : 0;
 
   let nsBody = nameStatus.code === 0 ? nameStatus.stdout.trim() : "";
 
@@ -997,9 +979,7 @@ async function collectDiffContext(
   if (untracked && untracked.code === 0) {
     const untrackedFiles = splitGitLines(untracked.stdout);
     if (untrackedFiles.length > 0) {
-      const block =
-        "Untracked (new) files — not included in any embedded diff; read them with the file tools:\n" +
-        untrackedFiles.map((f) => `A\t${f}`).join("\n");
+      const block = `Untracked (new) files — not included in any embedded diff; read them with the file tools:\n${untrackedFiles.map((f) => `A\t${f}`).join("\n")}`;
       nsBody = nsBody ? `${nsBody}\n\n${block}` : block;
     }
   }
@@ -1025,9 +1005,7 @@ async function collectDiffContext(
   return { changedFiles, manifest, diff, lineCount };
 }
 
-async function loadProjectReviewGuidelines(
-  cwd: string,
-): Promise<string | null> {
+async function loadProjectReviewGuidelines(cwd: string): Promise<string | null> {
   let currentDir = path.resolve(cwd);
 
   while (true) {
@@ -1060,10 +1038,7 @@ async function loadProjectReviewGuidelines(
 /**
  * Get the merge base between HEAD and a branch
  */
-async function getMergeBase(
-  pi: ExtensionAPI,
-  branch: string,
-): Promise<string | null> {
+async function getMergeBase(pi: ExtensionAPI, branch: string): Promise<string | null> {
   try {
     // First try to get the upstream tracking branch
     const { stdout: upstream, code: upstreamCode } = await pi.exec("git", [
@@ -1084,11 +1059,7 @@ async function getMergeBase(
     }
 
     // Fall back to using the branch directly
-    const { stdout: mergeBase, code } = await pi.exec("git", [
-      "merge-base",
-      "HEAD",
-      branch,
-    ]);
+    const { stdout: mergeBase, code } = await pi.exec("git", ["merge-base", "HEAD", branch]);
     if (code === 0 && mergeBase.trim()) {
       return mergeBase.trim();
     }
@@ -1103,10 +1074,7 @@ async function getMergeBase(
  * Get list of local branches
  */
 async function getLocalBranches(pi: ExtensionAPI): Promise<string[]> {
-  const { stdout, code } = await pi.exec("git", [
-    "branch",
-    "--format=%(refname:short)",
-  ]);
+  const { stdout, code } = await pi.exec("git", ["branch", "--format=%(refname:short)"]);
   if (code !== 0) return [];
   return stdout
     .trim()
@@ -1119,14 +1087,9 @@ async function getLocalBranches(pi: ExtensionAPI): Promise<string[]> {
  */
 async function getRecentCommits(
   pi: ExtensionAPI,
-  limit: number = 10,
+  limit = 10,
 ): Promise<Array<{ sha: string; title: string }>> {
-  const { stdout, code } = await pi.exec("git", [
-    "log",
-    `--oneline`,
-    `-n`,
-    `${limit}`,
-  ]);
+  const { stdout, code } = await pi.exec("git", ["log", "--oneline", "-n", `${limit}`]);
   if (code !== 0) return [];
 
   return stdout
@@ -1172,8 +1135,8 @@ function parsePrReference(ref: string): number | null {
   const trimmed = ref.trim();
 
   // Try as a number first
-  const num = parseInt(trimmed, 10);
-  if (!isNaN(num) && num > 0) {
+  const num = Number.parseInt(trimmed, 10);
+  if (!Number.isNaN(num) && num > 0) {
     return num;
   }
 
@@ -1182,7 +1145,7 @@ function parsePrReference(ref: string): number | null {
   //          github.com/owner/repo/pull/123
   const urlMatch = trimmed.match(/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/);
   if (urlMatch) {
-    return parseInt(urlMatch[1], 10);
+    return Number.parseInt(urlMatch[1], 10);
   }
 
   return null;
@@ -1224,11 +1187,7 @@ async function checkoutPr(
   pi: ExtensionAPI,
   prNumber: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const { stdout, stderr, code } = await pi.exec("gh", [
-    "pr",
-    "checkout",
-    String(prNumber),
-  ]);
+  const { stdout, stderr, code } = await pi.exec("gh", ["pr", "checkout", String(prNumber)]);
 
   if (code !== 0) {
     return {
@@ -1292,12 +1251,7 @@ function appendDiffContext(base: string, diffContext?: DiffContext): string {
     // literals with backticks); use a fence longer than any backtick run in the
     // diff so it cannot be closed early.
     const fence = makeFenceFor(diffContext.diff);
-    out +=
-      "\n\nThe full diff for this review is included below. You may rely on it" +
-      " directly instead of re-running git to fetch the diff (still read" +
-      ` surrounding code with the file tools as needed):\n\n${fence}diff\n` +
-      diffContext.diff +
-      `\n${fence}`;
+    out += `\n\nThe full diff for this review is included below. You may rely on it directly instead of re-running git to fetch the diff (still read surrounding code with the file tools as needed):\n\n${fence}diff\n${diffContext.diff}\n${fence}`;
   }
   return out;
 }
@@ -1349,10 +1303,10 @@ async function buildReviewPrompt(
           ? options.mergeBase
           : await getMergeBase(pi, target.branch);
       const basePrompt = mergeBase
-        ? BASE_BRANCH_PROMPT_WITH_MERGE_BASE.replace(
-            /{baseBranch}/g,
-            target.branch,
-          ).replace(/{mergeBaseSha}/g, mergeBase)
+        ? BASE_BRANCH_PROMPT_WITH_MERGE_BASE.replace(/{baseBranch}/g, target.branch).replace(
+            /{mergeBaseSha}/g,
+            mergeBase,
+          )
         : BASE_BRANCH_PROMPT_FALLBACK.replace(/{branch}/g, target.branch);
       const withLocal = includeLocalChanges
         ? `${basePrompt} ${LOCAL_CHANGES_REVIEW_INSTRUCTIONS}`
@@ -1362,10 +1316,7 @@ async function buildReviewPrompt(
 
     case "commit": {
       const basePrompt = target.title
-        ? COMMIT_PROMPT_WITH_TITLE.replace("{sha}", target.sha).replace(
-            "{title}",
-            target.title,
-          )
+        ? COMMIT_PROMPT_WITH_TITLE.replace("{sha}", target.sha).replace("{title}", target.title)
         : COMMIT_PROMPT.replace("{sha}", target.sha);
       return appendDiffContext(basePrompt, diffContext);
     }
@@ -1380,10 +1331,7 @@ async function buildReviewPrompt(
             .replace(/{title}/g, target.title)
             .replace(/{baseBranch}/g, target.baseBranch)
             .replace(/{mergeBaseSha}/g, mergeBase)
-        : PULL_REQUEST_PROMPT_FALLBACK.replace(
-            /{prNumber}/g,
-            String(target.prNumber),
-          )
+        : PULL_REQUEST_PROMPT_FALLBACK.replace(/{prNumber}/g, String(target.prNumber))
             .replace(/{title}/g, target.title)
             .replace(/{baseBranch}/g, target.baseBranch);
       const withLocal = includeLocalChanges
@@ -1409,24 +1357,18 @@ function getUserFacingHint(target: ReviewTarget): string {
       return `changes against '${target.branch}'`;
     case "commit": {
       const shortSha = target.sha.slice(0, 7);
-      return target.title
-        ? `commit ${shortSha}: ${target.title}`
-        : `commit ${shortSha}`;
+      return target.title ? `commit ${shortSha}: ${target.title}` : `commit ${shortSha}`;
     }
 
     case "pullRequest": {
       const shortTitle =
-        target.title.length > 30
-          ? target.title.slice(0, 27) + "..."
-          : target.title;
+        target.title.length > 30 ? `${target.title.slice(0, 27)}...` : target.title;
       return `PR #${target.prNumber}: ${shortTitle}`;
     }
 
     case "folder": {
       const joined = target.paths.join(", ");
-      return joined.length > 40
-        ? `folders: ${joined.slice(0, 37)}...`
-        : `folders: ${joined}`;
+      return joined.length > 40 ? `folders: ${joined.slice(0, 37)}...` : `folders: ${joined}`;
     }
   }
 }
@@ -1450,19 +1392,17 @@ function extractAssistantTextContent(content: unknown): string {
     .filter((part): part is { type: "text"; text: string } =>
       Boolean(
         part &&
-        typeof part === "object" &&
-        "type" in part &&
-        part.type === "text" &&
-        "text" in part,
+          typeof part === "object" &&
+          "type" in part &&
+          part.type === "text" &&
+          "text" in part,
       ),
     )
     .map((part) => part.text);
   return textParts.join("\n").trim();
 }
 
-function getLastAssistantSnapshot(
-  ctx: ExtensionContext,
-): AssistantSnapshot | null {
+function getLastAssistantSnapshot(ctx: ExtensionContext): AssistantSnapshot | null {
   const entries = ctx.sessionManager.getBranch();
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
@@ -1575,9 +1515,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Determine the smart default review type based on git state
    */
-  async function getSmartDefault(): Promise<
-    "uncommitted" | "baseBranch" | "commit"
-  > {
+  async function getSmartDefault(): Promise<"uncommitted" | "baseBranch" | "commit"> {
     // Priority 1: If there are uncommitted changes, default to reviewing them
     if (await hasUncommittedChanges(pi)) {
       return "uncommitted";
@@ -1597,9 +1535,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Show the review preset selector
    */
-  async function showReviewSelector(
-    ctx: ExtensionContext,
-  ): Promise<ReviewTarget | null> {
+  async function showReviewSelector(ctx: ExtensionContext): Promise<ReviewTarget | null> {
     // Determine smart default (but keep the list order stable)
     const smartDefault = await getSmartDefault();
     const presetItems: SelectItem[] = REVIEW_PRESETS.map((preset) => ({
@@ -1607,9 +1543,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
       label: preset.label,
       description: preset.description,
     }));
-    const smartDefaultIndex = presetItems.findIndex(
-      (item) => item.value === smartDefault,
-    );
+    const smartDefaultIndex = presetItems.findIndex((item) => item.value === smartDefault);
 
     while (true) {
       const customInstructionsLabel = reviewCustomInstructions
@@ -1621,9 +1555,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
       const loopToggleLabel = reviewLoopFixingEnabled
         ? "Disable Loop Fixing"
         : "Enable Loop Fixing";
-      const loopToggleDescription = reviewLoopFixingEnabled
-        ? "(currently on)"
-        : "(currently off)";
+      const loopToggleDescription = reviewLoopFixingEnabled ? "(currently on)" : "(currently off)";
       const items: SelectItem[] = [
         ...presetItems,
         {
@@ -1638,66 +1570,51 @@ export default function reviewExtension(pi: ExtensionAPI) {
         },
       ];
 
-      const result = await ctx.ui.custom<ReviewPresetValue | null>(
-        (tui, theme, _kb, done) => {
-          const container = new Container();
-          container.addChild(
-            new DynamicBorder((str) => theme.fg("accent", str)),
-          );
-          container.addChild(
-            new Text(theme.fg("accent", theme.bold("Select a review preset"))),
-          );
+      const result = await ctx.ui.custom<ReviewPresetValue | null>((tui, theme, _kb, done) => {
+        const container = new Container();
+        container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+        container.addChild(new Text(theme.fg("accent", theme.bold("Select a review preset"))));
 
-          const selectList = new SelectList(items, Math.min(items.length, 10), {
-            selectedPrefix: (text) => theme.fg("accent", text),
-            selectedText: (text) => theme.fg("accent", text),
-            description: (text) => theme.fg("muted", text),
-            scrollInfo: (text) => theme.fg("dim", text),
-            noMatch: (text) => theme.fg("warning", text),
-          });
+        const selectList = new SelectList(items, Math.min(items.length, 10), {
+          selectedPrefix: (text) => theme.fg("accent", text),
+          selectedText: (text) => theme.fg("accent", text),
+          description: (text) => theme.fg("muted", text),
+          scrollInfo: (text) => theme.fg("dim", text),
+          noMatch: (text) => theme.fg("warning", text),
+        });
 
-          // Preselect the smart default without reordering the list
-          if (smartDefaultIndex >= 0) {
-            selectList.setSelectedIndex(smartDefaultIndex);
-          }
+        // Preselect the smart default without reordering the list
+        if (smartDefaultIndex >= 0) {
+          selectList.setSelectedIndex(smartDefaultIndex);
+        }
 
-          selectList.onSelect = (item) => done(item.value as ReviewPresetValue);
-          selectList.onCancel = () => done(null);
+        selectList.onSelect = (item) => done(item.value as ReviewPresetValue);
+        selectList.onCancel = () => done(null);
 
-          container.addChild(selectList);
-          container.addChild(
-            new Text(
-              theme.fg("dim", "Press enter to confirm or esc to go back"),
-            ),
-          );
-          container.addChild(
-            new DynamicBorder((str) => theme.fg("accent", str)),
-          );
+        container.addChild(selectList);
+        container.addChild(new Text(theme.fg("dim", "Press enter to confirm or esc to go back")));
+        container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
-          return {
-            render(width: number) {
-              return container.render(width);
-            },
-            invalidate() {
-              container.invalidate();
-            },
-            handleInput(data: string) {
-              selectList.handleInput(data);
-              tui.requestRender();
-            },
-          };
-        },
-      );
+        return {
+          render(width: number) {
+            return container.render(width);
+          },
+          invalidate() {
+            container.invalidate();
+          },
+          handleInput(data: string) {
+            selectList.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      });
 
       if (!result) return null;
 
       if (result === TOGGLE_LOOP_FIXING_VALUE) {
         const nextEnabled = !reviewLoopFixingEnabled;
         setReviewLoopFixingEnabled(nextEnabled);
-        ctx.ui.notify(
-          nextEnabled ? "Loop fixing enabled" : "Loop fixing disabled",
-          "info",
-        );
+        ctx.ui.notify(nextEnabled ? "Loop fixing enabled" : "Loop fixing disabled", "info");
         continue;
       }
 
@@ -1736,10 +1653,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
         case "commit": {
           if (reviewLoopFixingEnabled) {
-            ctx.ui.notify(
-              "Loop mode does not work with commit review.",
-              "error",
-            );
+            ctx.ui.notify("Loop mode does not work with commit review.", "error");
             break;
           }
           const target = await showCommitSelector(ctx);
@@ -1768,9 +1682,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Show branch selector for base branch review
    */
-  async function showBranchSelector(
-    ctx: ExtensionContext,
-  ): Promise<ReviewTarget | null> {
+  async function showBranchSelector(ctx: ExtensionContext): Promise<ReviewTarget | null> {
     const branches = await getLocalBranches(pi);
     const currentBranch = await getCurrentBranch(pi);
     const defaultBranch = await getDefaultBranch(pi);
@@ -1803,102 +1715,89 @@ export default function reviewExtension(pi: ExtensionAPI) {
       description: branch === defaultBranch ? "(default)" : "",
     }));
 
-    const result = await ctx.ui.custom<string | null>(
-      (tui, theme, keybindings, done) => {
-        const container = new Container();
-        container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-        container.addChild(
-          new Text(theme.fg("accent", theme.bold("Select base branch"))),
-        );
+    const result = await ctx.ui.custom<string | null>((tui, theme, keybindings, done) => {
+      const container = new Container();
+      container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+      container.addChild(new Text(theme.fg("accent", theme.bold("Select base branch"))));
 
-        const searchInput = new Input();
-        container.addChild(searchInput);
-        container.addChild(new Spacer(1));
+      const searchInput = new Input();
+      container.addChild(searchInput);
+      container.addChild(new Spacer(1));
 
-        const listContainer = new Container();
-        container.addChild(listContainer);
-        container.addChild(
-          new Text(
-            theme.fg("dim", "Type to filter • enter to select • esc to cancel"),
-          ),
-        );
-        container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
+      const listContainer = new Container();
+      container.addChild(listContainer);
+      container.addChild(
+        new Text(theme.fg("dim", "Type to filter • enter to select • esc to cancel")),
+      );
+      container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
-        let filteredItems = items;
-        let selectList: SelectList | null = null;
+      let filteredItems = items;
+      let selectList: SelectList | null = null;
 
-        const updateList = () => {
-          listContainer.clear();
-          if (filteredItems.length === 0) {
-            listContainer.addChild(
-              new Text(theme.fg("warning", "  No matching branches")),
-            );
-            selectList = null;
+      const updateList = () => {
+        listContainer.clear();
+        if (filteredItems.length === 0) {
+          listContainer.addChild(new Text(theme.fg("warning", "  No matching branches")));
+          selectList = null;
+          return;
+        }
+
+        selectList = new SelectList(filteredItems, Math.min(filteredItems.length, 10), {
+          selectedPrefix: (text) => theme.fg("accent", text),
+          selectedText: (text) => theme.fg("accent", text),
+          description: (text) => theme.fg("muted", text),
+          scrollInfo: (text) => theme.fg("dim", text),
+          noMatch: (text) => theme.fg("warning", text),
+        });
+
+        selectList.onSelect = (item) => done(item.value);
+        selectList.onCancel = () => done(null);
+        listContainer.addChild(selectList);
+      };
+
+      const applyFilter = () => {
+        const query = searchInput.getValue();
+        filteredItems = query
+          ? fuzzyFilter(
+              items,
+              query,
+              (item) => `${item.label} ${item.value} ${item.description ?? ""}`,
+            )
+          : items;
+        updateList();
+      };
+
+      applyFilter();
+
+      return {
+        render(width: number) {
+          return container.render(width);
+        },
+        invalidate() {
+          container.invalidate();
+        },
+        handleInput(data: string) {
+          if (
+            keybindings.matches(data, "tui.select.up") ||
+            keybindings.matches(data, "tui.select.down") ||
+            keybindings.matches(data, "tui.select.confirm") ||
+            keybindings.matches(data, "tui.select.cancel")
+          ) {
+            if (selectList) {
+              selectList.handleInput(data);
+            } else if (keybindings.matches(data, "tui.select.cancel")) {
+              done(null);
+            }
+            tui.requestRender();
             return;
           }
 
-          selectList = new SelectList(
-            filteredItems,
-            Math.min(filteredItems.length, 10),
-            {
-              selectedPrefix: (text) => theme.fg("accent", text),
-              selectedText: (text) => theme.fg("accent", text),
-              description: (text) => theme.fg("muted", text),
-              scrollInfo: (text) => theme.fg("dim", text),
-              noMatch: (text) => theme.fg("warning", text),
-            },
-          );
-
-          selectList.onSelect = (item) => done(item.value);
-          selectList.onCancel = () => done(null);
-          listContainer.addChild(selectList);
-        };
-
-        const applyFilter = () => {
-          const query = searchInput.getValue();
-          filteredItems = query
-            ? fuzzyFilter(
-                items,
-                query,
-                (item) =>
-                  `${item.label} ${item.value} ${item.description ?? ""}`,
-              )
-            : items;
-          updateList();
-        };
-
-        applyFilter();
-
-        return {
-          render(width: number) {
-            return container.render(width);
-          },
-          invalidate() {
-            container.invalidate();
-          },
-          handleInput(data: string) {
-            if (
-              keybindings.matches(data, "tui.select.up") ||
-              keybindings.matches(data, "tui.select.down") ||
-              keybindings.matches(data, "tui.select.confirm") ||
-              keybindings.matches(data, "tui.select.cancel")
-            ) {
-              if (selectList) {
-                selectList.handleInput(data);
-              } else if (keybindings.matches(data, "tui.select.cancel")) {
-                done(null);
-              }
-              tui.requestRender();
-              return;
-            }
-
-            searchInput.handleInput(data);
-            applyFilter();
-            tui.requestRender();
-          },
-        };
-      },
-    );
+          searchInput.handleInput(data);
+          applyFilter();
+          tui.requestRender();
+        },
+      };
+    });
 
     if (!result) return null;
     return { type: "baseBranch", branch: result };
@@ -1907,9 +1806,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Show commit selector
    */
-  async function showCommitSelector(
-    ctx: ExtensionContext,
-  ): Promise<ReviewTarget | null> {
+  async function showCommitSelector(ctx: ExtensionContext): Promise<ReviewTarget | null> {
     const commits = await getRecentCommits(pi, 20);
 
     if (commits.length === 0) {
@@ -1927,9 +1824,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
       (tui, theme, keybindings, done) => {
         const container = new Container();
         container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
-        container.addChild(
-          new Text(theme.fg("accent", theme.bold("Select commit to review"))),
-        );
+        container.addChild(new Text(theme.fg("accent", theme.bold("Select commit to review"))));
 
         const searchInput = new Input();
         container.addChild(searchInput);
@@ -1938,9 +1833,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
         const listContainer = new Container();
         container.addChild(listContainer);
         container.addChild(
-          new Text(
-            theme.fg("dim", "Type to filter • enter to select • esc to cancel"),
-          ),
+          new Text(theme.fg("dim", "Type to filter • enter to select • esc to cancel")),
         );
         container.addChild(new DynamicBorder((str) => theme.fg("accent", str)));
 
@@ -1950,24 +1843,18 @@ export default function reviewExtension(pi: ExtensionAPI) {
         const updateList = () => {
           listContainer.clear();
           if (filteredItems.length === 0) {
-            listContainer.addChild(
-              new Text(theme.fg("warning", "  No matching commits")),
-            );
+            listContainer.addChild(new Text(theme.fg("warning", "  No matching commits")));
             selectList = null;
             return;
           }
 
-          selectList = new SelectList(
-            filteredItems,
-            Math.min(filteredItems.length, 10),
-            {
-              selectedPrefix: (text) => theme.fg("accent", text),
-              selectedText: (text) => theme.fg("accent", text),
-              description: (text) => theme.fg("muted", text),
-              scrollInfo: (text) => theme.fg("dim", text),
-              noMatch: (text) => theme.fg("warning", text),
-            },
-          );
+          selectList = new SelectList(filteredItems, Math.min(filteredItems.length, 10), {
+            selectedPrefix: (text) => theme.fg("accent", text),
+            selectedText: (text) => theme.fg("accent", text),
+            description: (text) => theme.fg("muted", text),
+            scrollInfo: (text) => theme.fg("dim", text),
+            noMatch: (text) => theme.fg("warning", text),
+          });
 
           selectList.onSelect = (item) => {
             const commit = commits.find((c) => c.sha === item.value);
@@ -1987,8 +1874,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
             ? fuzzyFilter(
                 items,
                 query,
-                (item) =>
-                  `${item.label} ${item.value} ${item.description ?? ""}`,
+                (item) => `${item.label} ${item.value} ${item.description ?? ""}`,
               )
             : items;
           updateList();
@@ -2041,9 +1927,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Show folder input
    */
-  async function showFolderInput(
-    ctx: ExtensionContext,
-  ): Promise<ReviewTarget | null> {
+  async function showFolderInput(ctx: ExtensionContext): Promise<ReviewTarget | null> {
     const result = await ctx.ui.editor(
       "Enter folders/files to review (space-separated or one per line):",
       ".",
@@ -2059,9 +1943,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   /**
    * Show PR input and handle checkout
    */
-  async function showPrInput(
-    ctx: ExtensionContext,
-  ): Promise<ReviewTarget | null> {
+  async function showPrInput(ctx: ExtensionContext): Promise<ReviewTarget | null> {
     // First check for pending changes that would prevent branch switching
     if (await hasPendingChanges(pi)) {
       ctx.ui.notify(
@@ -2081,10 +1963,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
     const prNumber = parsePrReference(prRef);
     if (!prNumber) {
-      ctx.ui.notify(
-        "Invalid PR reference. Enter a number or GitHub PR URL.",
-        "error",
-      );
+      ctx.ui.notify("Invalid PR reference. Enter a number or GitHub PR URL.", "error");
       return null;
     }
 
@@ -2139,10 +2018,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
   ): Promise<boolean> {
     // Check if we're already in a review
     if (reviewOriginId) {
-      ctx.ui.notify(
-        "Already in a review. Use /end-review to finish first.",
-        "warning",
-      );
+      ctx.ui.notify("Already in a review. Use /end-review to finish first.", "warning");
       return false;
     }
 
@@ -2411,10 +2287,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
     const prNumber = parsePrReference(ref);
     if (!prNumber) {
-      ctx.ui.notify(
-        "Invalid PR reference. Enter a number or GitHub PR URL.",
-        "error",
-      );
+      ctx.ui.notify("Invalid PR reference. Enter a number or GitHub PR URL.", "error");
       return null;
     }
 
@@ -2482,36 +2355,21 @@ export default function reviewExtension(pi: ExtensionAPI) {
           extraInstruction,
         });
         if (!started) {
-          ctx.ui.notify(
-            "Loop fixing stopped before starting the review pass.",
-            "warning",
-          );
+          ctx.ui.notify("Loop fixing stopped before starting the review pass.", "warning");
           return;
         }
 
-        const reviewTurnStarted = await waitForLoopTurnToStart(
-          ctx,
-          reviewBaselineAssistantId,
-        );
+        const reviewTurnStarted = await waitForLoopTurnToStart(ctx, reviewBaselineAssistantId);
         if (!reviewTurnStarted) {
-          ctx.ui.notify(
-            "Loop fixing stopped: review pass did not start in time.",
-            "error",
-          );
+          ctx.ui.notify("Loop fixing stopped: review pass did not start in time.", "error");
           return;
         }
 
         await ctx.waitForIdle();
 
         const reviewSnapshot = getLastAssistantSnapshot(ctx);
-        if (
-          !reviewSnapshot ||
-          reviewSnapshot.id === reviewBaselineAssistantId
-        ) {
-          ctx.ui.notify(
-            "Loop fixing stopped: could not read the review result.",
-            "warning",
-          );
+        if (!reviewSnapshot || reviewSnapshot.id === reviewBaselineAssistantId) {
+          ctx.ui.notify("Loop fixing stopped: could not read the review result.", "warning");
           return;
         }
 
@@ -2521,10 +2379,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
         }
 
         if (reviewSnapshot.stopReason === "error") {
-          ctx.ui.notify(
-            "Loop fixing stopped: review failed with an error.",
-            "error",
-          );
+          ctx.ui.notify("Loop fixing stopped: review failed with an error.", "error");
           return;
         }
 
@@ -2537,22 +2392,15 @@ export default function reviewExtension(pi: ExtensionAPI) {
         }
 
         if (!hasBlockingReviewFindings(reviewSnapshot.text)) {
-          const finalized = await executeEndReviewAction(
-            ctx,
-            "returnAndSummarize",
-            {
-              showSummaryLoader: true,
-              notifySuccess: false,
-            },
-          );
+          const finalized = await executeEndReviewAction(ctx, "returnAndSummarize", {
+            showSummaryLoader: true,
+            notifySuccess: false,
+          });
           if (finalized !== "ok") {
             return;
           }
 
-          ctx.ui.notify(
-            "Loop fixing complete: no blocking findings remain.",
-            "info",
-          );
+          ctx.ui.notify("Loop fixing complete: no blocking findings remain.", "info");
           return;
         }
 
@@ -2562,27 +2410,17 @@ export default function reviewExtension(pi: ExtensionAPI) {
         );
 
         const fixBaselineAssistantId = getLastAssistantSnapshot(ctx)?.id;
-        const sentFixPrompt = await executeEndReviewAction(
-          ctx,
-          "returnAndFix",
-          {
-            showSummaryLoader: true,
-            notifySuccess: false,
-          },
-        );
+        const sentFixPrompt = await executeEndReviewAction(ctx, "returnAndFix", {
+          showSummaryLoader: true,
+          notifySuccess: false,
+        });
         if (sentFixPrompt !== "ok") {
           return;
         }
 
-        const fixTurnStarted = await waitForLoopTurnToStart(
-          ctx,
-          fixBaselineAssistantId,
-        );
+        const fixTurnStarted = await waitForLoopTurnToStart(ctx, fixBaselineAssistantId);
         if (!fixTurnStarted) {
-          ctx.ui.notify(
-            "Loop fixing stopped: fix pass did not start in time.",
-            "error",
-          );
+          ctx.ui.notify("Loop fixing stopped: fix pass did not start in time.", "error");
           return;
         }
 
@@ -2590,24 +2428,15 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
         const fixSnapshot = getLastAssistantSnapshot(ctx);
         if (!fixSnapshot || fixSnapshot.id === fixBaselineAssistantId) {
-          ctx.ui.notify(
-            "Loop fixing stopped: could not read the fix pass result.",
-            "warning",
-          );
+          ctx.ui.notify("Loop fixing stopped: could not read the fix pass result.", "warning");
           return;
         }
         if (fixSnapshot.stopReason === "aborted") {
-          ctx.ui.notify(
-            "Loop fixing stopped: fix pass was aborted.",
-            "warning",
-          );
+          ctx.ui.notify("Loop fixing stopped: fix pass was aborted.", "warning");
           return;
         }
         if (fixSnapshot.stopReason === "error") {
-          ctx.ui.notify(
-            "Loop fixing stopped: fix pass failed with an error.",
-            "error",
-          );
+          ctx.ui.notify("Loop fixing stopped: fix pass failed with an error.", "error");
           return;
         }
         if (fixSnapshot.stopReason === "length") {
@@ -2631,8 +2460,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
   // Register the /review command
   pi.registerCommand("review", {
-    description:
-      "Review code changes (PR, uncommitted, branch, commit, or folder)",
+    description: "Review code changes (PR, uncommitted, branch, commit, or folder)",
     handler: async (args, ctx) => {
       if (!ctx.hasUI) {
         ctx.ui.notify("Review requires interactive mode", "error");
@@ -2646,10 +2474,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
 
       // Check if we're already in a review
       if (reviewOriginId) {
-        ctx.ui.notify(
-          "Already in a review. Use /end-review to finish first.",
-          "warning",
-        );
+        ctx.ui.notify("Already in a review. Use /end-review to finish first.", "warning");
         return;
       }
 
@@ -2676,10 +2501,7 @@ export default function reviewExtension(pi: ExtensionAPI) {
           // Handle PR checkout (async operation)
           target = await handlePrCheckout(ctx, parsed.target.ref);
           if (!target) {
-            ctx.ui.notify(
-              "PR review failed. Returning to review menu.",
-              "warning",
-            );
+            ctx.ui.notify("PR review failed. Returning to review menu.", "warning");
           }
         } else {
           target = parsed.target;
@@ -2826,10 +2648,7 @@ Instructions:
     if (state?.active) {
       setReviewWidget(ctx, false);
       pi.appendEntry(REVIEW_STATE_TYPE, { active: false });
-      ctx.ui.notify(
-        "Review state was missing origin info; cleared review status.",
-        "warning",
-      );
+      ctx.ui.notify("Review state was missing origin info; cleared review status.", "warning");
     }
 
     return undefined;
@@ -2911,10 +2730,7 @@ Instructions:
       try {
         const result = await ctx.navigateTree(originId, { summarize: false });
         if (result.cancelled) {
-          ctx.ui.notify(
-            "Navigation cancelled. Use /end-review to try again.",
-            "info",
-          );
+          ctx.ui.notify("Navigation cancelled. Use /end-review to try again.", "info");
           return "cancelled";
         }
       } catch (error) {
@@ -2927,10 +2743,7 @@ Instructions:
 
       clearReviewState(ctx);
       if (notifySuccess) {
-        ctx.ui.notify(
-          "Review complete! Returned to original position.",
-          "info",
-        );
+        ctx.ui.notify("Review complete! Returned to original position.", "info");
       }
       return "ok";
     }
@@ -2941,10 +2754,7 @@ Instructions:
       options.showSummaryLoader ?? false,
     );
     if (summaryResult === null) {
-      ctx.ui.notify(
-        "Summarization cancelled. Use /end-review to try again.",
-        "info",
-      );
+      ctx.ui.notify("Summarization cancelled. Use /end-review to try again.", "info");
       return "cancelled";
     }
 
@@ -2954,10 +2764,7 @@ Instructions:
     }
 
     if (summaryResult.cancelled) {
-      ctx.ui.notify(
-        "Navigation cancelled. Use /end-review to try again.",
-        "info",
-      );
+      ctx.ui.notify("Navigation cancelled. Use /end-review to try again.", "info");
       return "cancelled";
     }
 
@@ -2975,10 +2782,7 @@ Instructions:
 
     pi.sendUserMessage(REVIEW_FIX_FINDINGS_PROMPT, { deliverAs: "followUp" });
     if (notifySuccess) {
-      ctx.ui.notify(
-        "Review complete! Returned and queued a follow-up to fix findings.",
-        "info",
-      );
+      ctx.ui.notify("Review complete! Returned and queued a follow-up to fix findings.", "info");
     }
     return "ok";
   }
@@ -2990,10 +2794,7 @@ Instructions:
     }
 
     if (reviewLoopInProgress) {
-      ctx.ui.notify(
-        "Loop fixing review is running. Wait for it to finish.",
-        "info",
-      );
+      ctx.ui.notify("Loop fixing review is running. Wait for it to finish.", "info");
       return;
     }
 
