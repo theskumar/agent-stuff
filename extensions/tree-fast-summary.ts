@@ -9,10 +9,11 @@
  *   expensive main model. `/compact` is NOT touched by this extension and
  *   continues to use the active session model.
  *
- *   Reuses pi's exported `generateBranchSummary`, so the prompt, structured
- *   output format, file tracking, and preamble are identical to the built-in
- *   — only the model swaps out. Falls back to `FALLBACK_FAST_MODEL` if no
- *   usable `fast` mode is found.
+ *   Reuses pi's exported `generateBranchSummary`, so the structured output
+ *   format, file tracking, and preamble are identical to the built-in — only
+ *   the model swaps out, and we append a couple of extra guideline lines to
+ *   the summarization instructions (see EXTRA_TREE_GUIDELINES). Falls back
+ *   to `FALLBACK_FAST_MODEL` if no usable `fast` mode is found.
  *
  * Use cases:
  *   - Heavy `/tree` navigators who don't want to pay GPT-5 / Opus rates for
@@ -42,7 +43,8 @@
  *
  * We reuse pi's exported `generateBranchSummary`, so the prompt, structured
  * format, file tracking, and preamble are identical to the built-in summarizer
- * — only the model changes.
+ * — only the model changes and a couple of extra guideline lines are appended
+ * via `customInstructions` (see EXTRA_TREE_GUIDELINES).
  */
 
 import fs from "node:fs/promises";
@@ -53,6 +55,14 @@ import { generateBranchSummary } from "@earendil-works/pi-coding-agent";
 
 // Name of the mode in modes.json to use for summarization.
 const FAST_MODE_NAME = "fast";
+
+// Extra guideline lines appended to pi's built-in BRANCH_SUMMARY_PROMPT via
+// `customInstructions` (i.e. under the "Additional focus:" line). Keep these
+// short — they are not a replacement for the default prompt, just additions.
+const EXTRA_TREE_GUIDELINES = [
+  'Include a "Suggested Skills" section listing skills the agent should invoke when resuming this branch (skill name + one-line reason). Use "(none)" if no skills apply.',
+  "Do not duplicate content already captured in other artifacts (PRDs, plans, ADRs, issues, commits, diffs). Reference them by path or URL instead.",
+].join("\n");
 
 // Used only when modes.json has no usable `fast` mode (missing file, missing
 // mode, or missing provider/modelId).
@@ -151,12 +161,22 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify(`tree-fast-summary: summarizing branch with ${model.id}…`, "info");
       }
 
+      // Merge our extra guidelines with any user-supplied custom instructions.
+      // When `replaceInstructions` is true the user's text fully replaces pi's
+      // BRANCH_SUMMARY_PROMPT, so we append our guidelines to it. Otherwise
+      // pi's code appends `customInstructions` after "Additional focus:", so
+      // we just concatenate ours with the user's (if any).
+      const userInstructions = preparation.customInstructions?.trim();
+      const customInstructions = userInstructions
+        ? `${userInstructions}\n\n${EXTRA_TREE_GUIDELINES}`
+        : EXTRA_TREE_GUIDELINES;
+
       const result = await generateBranchSummary(preparation.entriesToSummarize, {
         model,
         apiKey: auth.apiKey,
         headers: auth.headers,
         signal,
-        customInstructions: preparation.customInstructions,
+        customInstructions,
         replaceInstructions: preparation.replaceInstructions,
       });
 
