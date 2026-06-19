@@ -54,6 +54,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 |---|---|
 | [`adr`](skills/adr/) | Architecture Decision Records |
 | [`commit`](skills/commit/) | Conventional Commit messages |
+| [`domain-modeling`](skills/domain-modeling/) | Build/sharpen a project's domain glossary (`CONTEXT.md`) and ADRs (source: [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering/domain-modeling)) |
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
@@ -65,6 +66,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
+| [`triage`](skills/triage/) | Move issues/external PRs through a triage state machine; write agent-ready briefs (source: [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/engineering/triage)) |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`web-browser`](skills/web-browser/) | Interactive browser automation via Chrome DevTools Protocol |
 

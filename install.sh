@@ -36,7 +36,7 @@ done
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github librarian uv summarize mermaid sentry notion pr-summary)
+CC_SKILLS=(commit github librarian uv summarize mermaid sentry notion pr-summary grill-me triage domain-modeling)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
