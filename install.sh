@@ -60,6 +60,7 @@ CC_PROMPTS=(
   create_idea_compass
   create_micro_summary
   create_user_story
+  edit-article
   extract_wisdom
   humanize
 )

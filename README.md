@@ -79,6 +79,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`create_idea_compass.md`](prompts/create_idea_compass.md) | Organize and structure ideas by exploring definition, evidence, and related themes |
 | [`create_micro_summary.md`](prompts/create_micro_summary.md) | Generate concise micro summaries of content |
 | [`create_user_story.md`](prompts/create_user_story.md) | Write clear technical user stories formatted for all stakeholders |
+| [`edit-article.md`](prompts/edit-article.md) | Edit/revise article drafts: restructure sections by dependency, tighten prose (source: [mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/personal/edit-article/SKILL.md)) |
 | [`extract_wisdom.md`](prompts/extract_wisdom.md) | Extract surprising and insightful information from text |
 | [`humanize.md`](prompts/humanize.md) | Rewrite AI-generated text to sound natural and conversational |
 | [`security-audit.md`](prompts/security-audit.md) | Comprehensive security audit (OWASP, deps, secrets) |
