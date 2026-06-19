@@ -65,6 +65,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
+| [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |
 | [`web-browser`](skills/web-browser/) | Interactive browser automation via Chrome DevTools Protocol |
 
 ## Prompts
