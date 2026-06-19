@@ -2,11 +2,12 @@
  * Tree Fast Summary Extension
  *
  * What it is:
- *   pi's `/tree` branch summarization (and `/compact`) normally run on the
- *   currently active session model. This extension reroutes those summary
- *   calls to a cheap, fast model configured via the `fast` mode in
- *   `modes.json` (resolved project-first, then global), so navigating the
- *   tree or compacting context doesn't burn your expensive main model.
+ *   pi's `/tree` branch summarization normally runs on the currently active
+ *   session model. This extension reroutes that summary call to a cheap,
+ *   fast model configured via the `fast` mode in `modes.json` (resolved
+ *   project-first, then global), so navigating the tree doesn't burn your
+ *   expensive main model. `/compact` is NOT touched by this extension and
+ *   continues to use the active session model.
  *
  *   Reuses pi's exported `generateBranchSummary`, so the prompt, structured
  *   output format, file tracking, and preamble are identical to the built-in
@@ -16,16 +17,14 @@
  * Use cases:
  *   - Heavy `/tree` navigators who don't want to pay GPT-5 / Opus rates for
  *     branch summaries.
- *   - `/compact`-driven workflows on long sessions where the summary itself
- *     is just throwaway housekeeping.
- *   - Consistent fast-path summarization across projects via a single
- *     `~/.pi/agent/modes.json` `fast` entry.
+ *   - Consistent fast-path `/tree` summarization across projects via a
+ *     single `~/.pi/agent/modes.json` `fast` entry.
  *
  * Common usage patterns:
  *   - Add a `fast` mode via `/mode` (Configure modes…) or directly in
  *     modes.json — see below.
- *   - Use `/tree` and `/compact` as normal; summaries automatically use the
- *     fast model.
+ *   - Use `/tree` as normal; branch summaries automatically use the fast
+ *     model.
  *   - Override per-project by adding `fast` to `.pi/modes.json`.
  *
  * The model is NOT hard-coded here. It is read from the `fast` mode in
