@@ -15,19 +15,18 @@ You are summarizing web content for the user. The input is: $ARGUMENTS
 
 ### 2. Fetch the article
 
-Use the web-browser skill's `content.js` to extract readable markdown from the article URL.
-Before using it, ensure Chrome is running:
+
+```bash
+uvx --from 'markitdown' markitdown "<article-url>"
+```
+
+If `content.js` fails (empty output or error), fall back to the web-browser skill's `content.js` 
+to extract readable markdown from the article URL. Before using it, ensure Chrome is running:
 
 ```bash
 cd ~/.agents/skills/web-browser/scripts
 node start.js --profile --stealth 2>/dev/null
 node content.js "<article-url>" 2>/dev/null
-```
-
-If `content.js` fails (empty output or error), fall back to:
-
-```bash
-uvx --from 'markitdown' markitdown "<article-url>"
 ```
 
 ### 3. Fetch HN comments (only for HN URLs)
