@@ -1170,6 +1170,14 @@ class PromptEditor extends CustomEditor {
     text: string;
     color: (text: string) => string;
   } | null;
+  /**
+   * Optional secondary right-side decoration rendered to the left of
+   * rightDecorationProvider (e.g. session name). Only shown when non-null.
+   */
+  public secondaryDecorationProvider?: () => {
+    text: string;
+    color: (text: string) => string;
+  } | null;
   private lockedBorder = false;
   private _borderColor?: (text: string) => string;
 
@@ -1253,33 +1261,34 @@ class PromptEditor extends CustomEditor {
     const remaining = width - prefix.length - labelChunkLen;
     if (remaining < 0) return lines;
 
-    // Right-side decoration (e.g. low-battery indicator).
-    // Use visibleWidth() rather than .length so multi-cell glyphs (emoji, CJK)
-    // don't break border alignment.
-    const decoration = this.rightDecorationProvider?.() ?? null;
-    let decorationChunkWidth = 0;
-    let decorationText = "";
-    let decorationColor: ((s: string) => string) | null = null;
-    if (decoration?.text) {
-      // Reserve " <text>──" on the right (1 cell left pad + 2 cell trailing fill).
-      const decoLeftPad = 1;
-      const decoRightFill = 2;
-      const maxDecoWidth = Math.max(0, remaining - decoLeftPad - decoRightFill);
-      if (maxDecoWidth > 0) {
-        decorationText = truncateToWidth(decoration.text, maxDecoWidth);
-        decorationColor = decoration.color;
-        decorationChunkWidth = decoLeftPad + visibleWidth(decorationText) + decoRightFill;
-      }
+    // Right-side decorations: rendered left-to-right, each as " text──".
+    // Use visibleWidth() so multi-cell glyphs (emoji, CJK) don't break alignment.
+    const decoLeftPad = 1;
+    const decoRightFill = 2;
+    type DecoItem = { text: string; color: (s: string) => string };
+    const rawDecos: (DecoItem | null)[] = [
+      this.secondaryDecorationProvider?.() ?? null,
+      this.rightDecorationProvider?.() ?? null,
+    ];
+
+    let totalDecoWidth = 0;
+    const resolvedDecos: DecoItem[] = [];
+    for (const deco of rawDecos) {
+      if (!deco?.text) continue;
+      const maxDecoWidth = Math.max(0, remaining - totalDecoWidth - decoLeftPad - decoRightFill);
+      if (maxDecoWidth <= 0) break;
+      const truncated = truncateToWidth(deco.text, maxDecoWidth);
+      resolvedDecos.push({ text: truncated, color: deco.color });
+      totalDecoWidth += decoLeftPad + visibleWidth(truncated) + decoRightFill;
     }
 
-    const right = "─".repeat(Math.max(0, remaining - decorationChunkWidth));
+    const right = "─".repeat(Math.max(0, remaining - totalDecoWidth));
     const coloredLabel = labelParts
       .map((part) => (part.text ? part.color(part.text) : ""))
       .join("");
-    const coloredDecoration =
-      decorationText && decorationColor
-        ? this.borderColor(" ") + decorationColor(decorationText) + this.borderColor("──")
-        : "";
+    const coloredDecoration = resolvedDecos
+      .map((d) => this.borderColor(" ") + d.color(d.text) + this.borderColor("──"))
+      .join("");
     lines[0] =
       this.borderColor(prefix) +
       (labelLeftSpace ? labelColor(labelLeftSpace) : "") +
@@ -1659,6 +1668,11 @@ function setEditor(pi: ExtensionAPI, ctx: ExtensionContext, history: PromptEntry
     editor.modeLabelProvider = () => runtime.currentMode;
     // Keep the mode label color stable (match footer/status bar).
     editor.modeLabelColor = (text: string) => uiTheme.fg("dim", text);
+    editor.secondaryDecorationProvider = () => {
+      const name = pi.getSessionName();
+      if (!name) return null;
+      return { text: name, color: (s: string) => uiTheme.fg("dim", s) };
+    };
     editor.rightDecorationProvider = () => getBatteryDecoration(uiTheme);
     const borderColor = (text: string) => {
       const isBashMode = editor.getText().trimStart().startsWith("!");
