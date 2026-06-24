@@ -1178,6 +1178,14 @@ class PromptEditor extends CustomEditor {
     text: string;
     color: (text: string) => string;
   } | null;
+  /**
+   * Optional tertiary right-side decoration rendered to the left of
+   * secondaryDecorationProvider (e.g. context usage). Only shown when non-null.
+   */
+  public tertiaryDecorationProvider?: () => {
+    text: string;
+    color: (text: string) => string;
+  } | null;
   private lockedBorder = false;
   private _borderColor?: (text: string) => string;
 
@@ -1267,6 +1275,7 @@ class PromptEditor extends CustomEditor {
     const decoRightFill = 2;
     type DecoItem = { text: string; color: (s: string) => string };
     const rawDecos: (DecoItem | null)[] = [
+      this.tertiaryDecorationProvider?.() ?? null,
       this.secondaryDecorationProvider?.() ?? null,
       this.rightDecorationProvider?.() ?? null,
     ];
@@ -1647,6 +1656,23 @@ function getBatteryDecoration(
   return { text, color: (s: string) => theme.fg("error", s) };
 }
 
+// =============================================================================
+// Context usage indicator
+// =============================================================================
+
+let contextUsagePercent: number | null = null;
+
+function getContextDecoration(
+  theme: EditorTheme,
+): { text: string; color: (s: string) => string } | null {
+  const pct = contextUsagePercent;
+  if (pct === null || pct < 50) return null;
+  const text = `ctx ${pct.toFixed(0)}%`;
+  if (pct >= 90) return { text, color: (s: string) => theme.fg("error", s) };
+  if (pct >= 70) return { text, color: (s: string) => theme.fg("warning", s) };
+  return { text, color: (s: string) => theme.fg("muted", s) };
+}
+
 // Overlay mode state ("custom"). Not selectable, not cycled into.
 let customOverlay: ModeSpec | null = null;
 
@@ -1673,6 +1699,7 @@ function setEditor(pi: ExtensionAPI, ctx: ExtensionContext, history: PromptEntry
       if (!name) return null;
       return { text: name, color: (s: string) => uiTheme.fg("dim", s) };
     };
+    editor.tertiaryDecorationProvider = () => getContextDecoration(uiTheme);
     editor.rightDecorationProvider = () => getBatteryDecoration(uiTheme);
     const borderColor = (text: string) => {
       const isBashMode = editor.getText().trimStart().startsWith("!");
@@ -1802,6 +1829,17 @@ export default function (pi: ExtensionAPI) {
     }
 
     applyEditor(pi, ctx);
+  });
+
+  pi.on("agent_end", (_event, ctx) => {
+    const usage = ctx.getContextUsage();
+    contextUsagePercent = usage?.percent ?? null;
+    requestEditorRender?.();
+  });
+
+  pi.on("session_compact", (_event, _ctx) => {
+    contextUsagePercent = null;
+    requestEditorRender?.();
   });
 
   pi.on("model_select", async (event, ctx) => {
