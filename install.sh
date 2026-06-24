@@ -22,6 +22,12 @@ for skill in "$REPO_DIR"/skills/*/; do
   link "$skill" "$HOME/.agents/skills/$name"
 done
 
+echo "==> Themes → ~/.pi/agent/themes/"
+for theme in "$REPO_DIR"/themes/*.json; do
+  name="$(basename "$theme")"
+  link "$theme" "$HOME/.pi/agent/themes/$name"
+done
+
 echo "==> Extensions → ~/.pi/agent/extensions/"
 for ext in "$REPO_DIR"/extensions/*.ts; do
   name="$(basename "$ext")"

@@ -8,7 +8,7 @@ Personal extensions, skills, and prompts for [pi](https://www.npmjs.com/package/
 ./install.sh
 ```
 
-Creates symlinks from `~/.agents/skills/`, `~/.pi/agent/extensions/`, `~/.pi/agent/prompts/`, and `~/.claude/commands/` into this repo. Re-run after adding new items. Existing non-symlink files are skipped.
+Creates symlinks from `~/.agents/skills/`, `~/.pi/agent/extensions/`, `~/.pi/agent/prompts/`, `~/.pi/agent/themes/`, and `~/.claude/commands/` into this repo. Re-run after adding new items. Existing non-symlink files are skipped.
 
 ## Extensions
 
@@ -34,6 +34,16 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [prompt]` forks the current session into a new pi process in a right-hand tmux split (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux) |
+
+## Themes
+
+pi color themes. Source: [`themes/`](themes/). Loaded via `"themes": ["~/.pi/agent/themes"]` in `~/.pi/agent/settings.json`; activate with `/theme <name>`.
+
+| Theme | Description |
+|---|---|
+| [`modern-dark.json`](themes/modern-dark.json) | Orange-accented dark theme (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
+| [`nightowl.json`](themes/nightowl.json) | Night Owl color scheme (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
+| [`dayowl.json`](themes/dayowl.json) | Day Owl light variant (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 
 ### PATH shims (activated by `uv.ts`)
 
