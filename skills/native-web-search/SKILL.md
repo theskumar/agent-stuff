@@ -5,7 +5,7 @@ description: "Trigger native web search. Use when you need quick internet resear
 
 # Native Web Search
 
-Use this skill to run a **fast model with native web search enabled** and get a concise research summary with explicit full URLs.
+Use this skill to run a **fast model (Haiku) with native web search enabled** and get a concise research summary with explicit full URLs. It shells out to the `claude` CLI in print mode with only `WebSearch`/`WebFetch` tools allowed.
 
 ## Script
 
@@ -28,9 +28,8 @@ node search.mjs "vite 7 breaking changes" --purpose "prepare migration checklist
 
 Optional flags:
 
-- `--provider openai-codex|anthropic`
-- `--model <model-id>`
-- `--timeout <ms>`
+- `--model <id>` (default: `haiku`)
+- `--timeout <ms>` (default: 120000)
 - `--json`
 
 ## Output expectations
@@ -43,7 +42,5 @@ The script instructs the model to:
 
 ## Notes
 
-- No extra npm install is required.
-- If module resolution fails, set `PI_AI_MODULE_PATH` to `@earendil-works/pi-ai`'s `dist/index.js` path.
-- If OAuth helper resolution fails, set `PI_AI_OAUTH_MODULE_PATH` to `@earendil-works/pi-ai`'s `dist/oauth.js` path.
-- For OAuth providers, the script can fall back to a still-valid cached `access` token from `~/.pi/agent/auth.json`.
+- Requires the `claude` CLI on PATH (Claude Code). No npm install needed.
+- Auth/model come from the local Claude Code config — no API keys handled here.
