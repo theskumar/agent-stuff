@@ -27,6 +27,17 @@ Three sections, in this order:
 2. **Summary**: what was done (behavioral changes, not file names)
 3. **How to test** *(optional)*: numbered steps a reviewer follows against a running app to verify the change. Use your judgment — include it when the change has observable runtime behavior a reviewer can exercise (API endpoints, commands, UI flows). Omit it when there's nothing meaningful to manually verify (e.g. pure refactors, docs, dependency bumps, changes fully covered by automated tests).
 
+## Creating the PR
+
+Do **not** pass the body via a heredoc or inline `--body "..."` — markdown bodies contain parentheses, backticks, and quotes that break shell quoting. Write the body to a temp file and use `--body-file`:
+
+```bash
+# write the body with your editor/Write tool to a temp file, e.g. /tmp/pr_body.md
+gh pr create --base main --head <branch> \
+  --title "<conventional-commit title>" \
+  --body-file /tmp/pr_body.md
+```
+
 ## Examples
 
 **fix with Linear ID:**
