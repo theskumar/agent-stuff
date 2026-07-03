@@ -52,6 +52,9 @@ for prompt in "$REPO_DIR"/prompts/*.md; do
   link "$prompt" "$HOME/.pi/agent/prompts/$name"
 done
 
+echo "==> Global AGENTS.md → ~/.pi/agent/AGENTS.md"
+link "$REPO_DIR/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
+
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
 CC_SKILLS=(commit github granola librarian uv summarize mermaid sentry notion pr-summary)

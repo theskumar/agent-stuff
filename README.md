@@ -48,6 +48,10 @@ Subagent definitions for the `subagents` extension. Source: [`agents/`](agents/)
 | [`planner.md`](agents/planner.md) | opus-4-8 | Implementation plans (high thinking) |
 | [`oracle.md`](agents/oracle.md) | fable-5 | Long-horizon complex work and decisions; costly, use sparingly |
 
+## Global AGENTS.md
+
+[`agent/AGENTS.md`](agent/AGENTS.md) is symlinked to `~/.pi/agent/AGENTS.md` — global instructions loaded into every pi session. It carries the subagent-delegation nudge, and it is the only prompt channel claude-bridge forwards to Claude subprocesses (sanitized, as `# CLAUDE.md`); extension prompt sections are dropped at the bridge. A project-local `AGENTS.md` shadows it on the bridge side, and the sanitizer rewrites the bare word "pi" to "environment" — avoid it in this file.
+
 ## Themes
 
 pi color themes. Source: [`themes/`](themes/). Loaded via `"themes": ["~/.pi/agent/themes"]` in `~/.pi/agent/settings.json`; activate with `/theme <name>`.
