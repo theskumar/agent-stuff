@@ -34,6 +34,19 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [prompt]` forks the current session into a new pi process in a right-hand tmux split (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux) |
+| [`subagents/`](extensions/subagents/) | `subagent` tool: delegate tasks to isolated `pi` subprocesses (single/parallel/chain), pinned to the `claude-bridge` provider by default; agent defs in [`agents/`](agents/) (adapted from [earendil-works/pi examples](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/examples/extensions/subagent)) |
+
+## Agents
+
+Subagent definitions for the `subagents` extension. Source: [`agents/`](agents/), symlinked to `~/.pi/agent/agents/`. Frontmatter: `name`, `description`, `tools`, `model` (bare ids pinned to `claude-bridge`; use `provider/id` or `provider:` to override), `thinking`.
+
+| Agent | Model | Purpose |
+|---|---|---|
+| [`scout.md`](agents/scout.md) | haiku-4-5 | Fast codebase recon, compressed handoff context |
+| [`worker.md`](agents/worker.md) | sonnet-5 | General-purpose implementation, full tools |
+| [`reviewer.md`](agents/reviewer.md) | sonnet-5 | Read-only code review |
+| [`planner.md`](agents/planner.md) | opus-4-8 | Implementation plans (high thinking) |
+| [`oracle.md`](agents/oracle.md) | fable-5 | Long-horizon complex work and decisions; costly, use sparingly |
 
 ## Themes
 
@@ -96,6 +109,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`summarize-url.md`](prompts/summarize-url.md) | Fetch and summarize URLs (including HN posts + comments) |
 | [`commit.md`](prompts/commit.md) | `/commit` slash command. Preloads `git status`/`diff`/`log` via `inline-bash` and delegates formatting to the `commit` skill |
 | [`go.md`](prompts/go.md) | `/go` execute prompt that nudges the agent to follow Explore → Plan → Clarify → Execute |
+| [`implement.md`](prompts/implement.md) | `/implement <task>` subagent chain: scout → planner → worker (pi-only, needs `subagents` extension) |
 
 ## Symlink targets
 

@@ -15,6 +15,12 @@ This repo stores pi extensions, skills, and prompts. Everything is symlinked int
 3. Add a one-line entry in `README.md` under the `skills/` section of the Layout block.
 4. If the skill should also be available in Claude Code, add its name to the `CC_SKILLS` array in `install.sh`.
 
+## Adding a new agent
+
+1. Place the `.md` file in `agents/` (frontmatter: `name`, `description`, optional `tools`, `model`, `provider`, `thinking`).
+2. Run `./install.sh` to symlink it to `~/.pi/agent/agents/`.
+3. Add a row in `README.md` under the Agents section.
+
 ## Adding a new prompt
 
 1. Place the `.md` file in `prompts/`.
@@ -34,3 +40,4 @@ This repo stores pi extensions, skills, and prompts. Everything is symlinked int
 - An extension that calls `registerTool({ name: "edit" })` overrides the built-in.
 - `renderShell: "self"` plus `renderCall` / `renderResult` are available to extensions. Delegating to the built-in's renderers (after normalizing args back to the built-in shape) preserves the live TUI diff preview.
 - Pi loads extensions through jiti with package aliases set up in `core/extensions/loader.js`. A standalone smoke test will fail with `Cannot find module '@earendil-works/pi-coding-agent'` unless it runs from `~/.pi/agent/npm/` and replicates those aliases.
+- Bare model ids like `claude-sonnet-5` are ambiguous across providers (bedrock, anthropic, and claude-bridge all register them). Pass `provider/id` (e.g. `claude-bridge/claude-sonnet-5`) when spawning `pi` subprocesses. Child `pi` processes load global `settings.json` packages, so claude-bridge is available in them automatically.

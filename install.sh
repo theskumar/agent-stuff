@@ -33,6 +33,18 @@ for ext in "$REPO_DIR"/extensions/*.ts; do
   name="$(basename "$ext")"
   link "$ext" "$HOME/.pi/agent/extensions/$name"
 done
+# Directory extensions (folder with index.ts)
+for ext in "$REPO_DIR"/extensions/*/; do
+  [ -f "$ext/index.ts" ] || continue
+  name="$(basename "$ext")"
+  link "${ext%/}" "$HOME/.pi/agent/extensions/$name"
+done
+
+echo "==> Agents → ~/.pi/agent/agents/"
+for agent in "$REPO_DIR"/agents/*.md; do
+  name="$(basename "$agent")"
+  link "$agent" "$HOME/.pi/agent/agents/$name"
+done
 
 echo "==> Prompts → ~/.pi/agent/prompts/"
 for prompt in "$REPO_DIR"/prompts/*.md; do
@@ -42,7 +54,7 @@ done
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github librarian uv summarize mermaid sentry notion pr-summary)
+CC_SKILLS=(commit github granola librarian uv summarize mermaid sentry notion pr-summary)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
@@ -57,7 +69,8 @@ echo "==> Claude commands"
 # security/audit → reuse prompts/security-audit.md
 link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audit.md"
 # Prompts portable to Claude Code (filename becomes the slash command).
-# Excluded: commit.md (uses pi-specific !{cmd} inline-bash syntax).
+# Excluded: commit.md (uses pi-specific !{cmd} inline-bash syntax),
+# implement.md (needs the pi-only subagent tool).
 CC_PROMPTS=(
   amazon-search
   summarize-url
