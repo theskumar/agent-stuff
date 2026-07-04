@@ -22,6 +22,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`tree-fast-summary.ts`](extensions/tree-fast-summary.ts) | Route `/tree` branch summarization through the `fast` mode in `modes.json` (project then global) instead of the main model, with a hard-coded fallback |
 | [`titlebar-spinner.ts`](extensions/titlebar-spinner.ts) | Braille spinner in terminal title while agent works |
 | [`notify.ts`](extensions/notify.ts) | OSC 777 desktop notification on turn end |
+| [`moshi-notify.ts`](extensions/moshi-notify.ts) | Push notification to [Moshi](https://getmoshi.app) iOS app on turn end via webhook (`MOSHI_API_TOKEN`, optional `MOSHI_UNIFIED=true`) |
 | [`snake.ts`](extensions/snake.ts) | `/snake` game |
 | [`uv.ts`](extensions/uv.ts) | Force Python tooling through `uv` |
 | [`files.ts`](extensions/files.ts) | File tool tweaks |
