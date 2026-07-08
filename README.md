@@ -83,6 +83,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`commit`](skills/commit/) | Conventional Commit messages |
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
+| [`granola`](skills/granola/) | Extract and search Granola meeting transcripts from local cache |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |

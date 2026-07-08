@@ -48,6 +48,8 @@ node scripts/notion.js exec [--script '...'] [--timeout 30000]
 
 `--parent` accepts `page:<id>`, `database:<id>`, or `data-source:<id>`. `page create/update` and `api` read body/content from stdin if `--content` is omitted. `page get` / `update` / `trash` accept either a UUID or a full Notion URL.
 
+> ⚠️ **`page update` REPLACES the entire page body — it is destructive, not append.** Passing `--content` overwrites every existing block on the page (and drops comment/discussion anchors). **Never use `page update` to add or tweak a section on an existing page you didn't just create.** For any surgical change to an existing page, use the block-level API (see "Surgical block edits" below) — do not round-trip the whole page through markdown.
+
 For file uploads (with content), use ntn directly:
 
 ```bash
@@ -104,6 +106,34 @@ ntn <command> --help                 # help for any command
 
 From inside `exec`: `notion.api.help(path)` / `.spec(path)` / `.docs(path)`.
 
+## Surgical block edits (add / edit / remove parts of an existing page)
+
+`page update` clobbers the whole page (see warning above). To change **part** of a page without touching the rest, work at the block level:
+
+1. **List children to get block ids:**
+   ```bash
+   node scripts/notion.js exec <<'JS'
+   const pid = notion.parsePageId('<url-or-id>');
+   const res = await notion.api('GET', `v1/blocks/${pid}/children`, null, { query: { page_size: 100 } });
+   const txt = b => { const t=b[b.type]; const rt=(t&&t.rich_text)||[]; return rt.map(r=>r.plain_text).join('').slice(0,50); };
+   return res.results.map(b => `${b.type}\t${b.id}\t${txt(b)}`);
+   JS
+   ```
+
+2. **Insert new blocks at a position** (only adds; existing blocks untouched) — append children with `after` set to the block id you want them to follow:
+   ```js
+   await notion.api('PATCH', `v1/blocks/${pid}/children`,
+     { children: [ /* block objects */ ], after: '<block-id-to-insert-after>' },
+     { notionVersion: '2022-06-28' });   // ← REQUIRED for `after`
+   ```
+   > **`after` gotcha:** the default API version rejects it (`400 … body.after should be not present`). You **must** pass `{ notionVersion: '2022-06-28' }`. Omit `after` entirely to append at the end of the page instead.
+
+3. **Edit one block's text:** `PATCH v1/blocks/<block_id>` with just that block-type payload (e.g. `{ paragraph: { rich_text: [...] } }`). Changes only that block.
+
+4. **Delete one block:** `DELETE v1/blocks/<block_id>` (archives it).
+
+Block object shape for `children`: `{ object:'block', type:'paragraph', paragraph:{ rich_text:[ { type:'text', text:{ content:'…', link:{url:'…'}? }, annotations:{ bold:true }? } ] } }`. Headings use `heading_2`/`heading_3`; a horizontal rule is `{ object:'block', type:'divider', divider:{} }`. A `\n` inside a rich_text `content` renders as a soft line break within the same block (matches the `**Bold**<br>text` lead-in pattern common in these docs).
+
 ## Markdown in comments
 
 Comments support markdown via the `markdown` field on `POST /v1/comments`:
@@ -120,7 +150,7 @@ Fall back to `rich_text` only for features markdown can't express (mentions, cus
 ## Agent guidance
 
 1. "Read/summarize this page" → `page get` (CLI) or `notion.page.get()` (exec).
-2. "Create/update this page from markdown" → `page create` / `page update` (CLI) or `notion.page.create/update()` (exec).
+2. "Create a new page from markdown" → `page create`. "Add/change a section on an **existing** page" → **Surgical block edits** (block-level API), NOT `page update` — `page update` overwrites the whole body. Only use `page update` to intentionally replace an entire page's content.
 3. For any other API endpoint inside `exec`, call `notion.api.help('v1/<path>')` or `notion.api.spec('v1/<path>')` **before** writing the call — the spec is authoritative; memorized shapes drift.
 4. Databases: use `notion.datasources.query(dataSourceId, ...)`. If the user gave you a database id, resolve to a data source id with `notion.datasources.resolve(databaseId)` first.
 5. Use `Promise.all` for independent requests.
