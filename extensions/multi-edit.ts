@@ -50,8 +50,9 @@
  * and the post-execution diff is included in the result.
  */
 
-import { unlink as fsUnlink, writeFile as fsWriteFile } from "node:fs/promises";
-import { isAbsolute, resolve as resolvePath } from "node:path";
+import { constants } from "node:fs";
+import { access as fsAccess, unlink as fsUnlink, writeFile as fsWriteFile } from "node:fs/promises";
+import { dirname, isAbsolute, resolve as resolvePath } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createEditToolDefinition, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -111,6 +112,7 @@ type Params = {
 // ---------------------------------------------------------------------------
 
 function prepareArguments(input: unknown): Params {
+  if (typeof input === "string") return { patch: input };
   if (!input || typeof input !== "object") return input as Params;
   const args = { ...(input as Record<string, unknown>) } as Record<string, unknown>;
   if (typeof args.edits === "string") {
@@ -288,6 +290,62 @@ function parsePatch(patchText: string): PatchOp[] {
 }
 
 // ---------------------------------------------------------------------------
+// Preflight: verify file accessibility before mutating anything.
+// ---------------------------------------------------------------------------
+
+async function checkCanCreatePath(absolutePath: string): Promise<void> {
+  let dir = dirname(absolutePath);
+  while (true) {
+    try {
+      await fsAccess(dir, constants.W_OK);
+      return;
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") throw err;
+      const parent = dirname(dir);
+      if (parent === dir) throw err;
+      dir = parent;
+    }
+  }
+}
+
+async function preflightPatchOps(cwd: string, ops: PatchOp[]): Promise<void> {
+  const errors: string[] = [];
+  for (const op of ops) {
+    const abs = resolveAbs(cwd, op.path);
+    try {
+      if (op.kind === "add") {
+        await checkCanCreatePath(abs);
+      } else {
+        await fsAccess(abs, constants.R_OK | constants.W_OK);
+      }
+    } catch {
+      errors.push(
+        `${op.path}: ${op.kind === "add" ? "parent directory not writable" : "file not readable/writable"}`,
+      );
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Preflight failed before mutating files.\n${errors.join("\n")}`);
+  }
+}
+
+async function preflightEditGroups(
+  groups: Map<string, { displayPath: string; items: Array<{ oldText: string; newText: string }> }>,
+): Promise<void> {
+  const errors: string[] = [];
+  for (const [absPath, g] of groups) {
+    try {
+      await fsAccess(absPath, constants.R_OK | constants.W_OK);
+    } catch {
+      errors.push(`${g.displayPath}: file not readable/writable`);
+    }
+  }
+  if (errors.length > 0) {
+    throw new Error(`Preflight failed before mutating files.\n${errors.join("\n")}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch helpers
 // ---------------------------------------------------------------------------
 
@@ -350,6 +408,7 @@ export default function (pi: ExtensionAPI) {
           throw new Error("`patch` is mutually exclusive with path/edits/oldText/newText.");
         }
         const ops = parsePatch(params.patch);
+        await preflightPatchOps(cwd, ops);
         const summaries: string[] = [];
         const diffs: string[] = [];
         let firstChangedLine: number | undefined;
@@ -462,7 +521,8 @@ export default function (pi: ExtensionAPI) {
         );
       }
 
-      // Multi-file: one built-in call per file, aggregate.
+      // Multi-file: preflight then one built-in call per file, aggregate.
+      await preflightEditGroups(groups);
       const summaries: string[] = [];
       const diffs: string[] = [];
       let firstChangedLine: number | undefined;
