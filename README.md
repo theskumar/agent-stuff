@@ -35,6 +35,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [prompt]` forks the current session into a new pi process in a right-hand tmux split (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux) |
+| [`handoff.ts`](extensions/handoff.ts) | `/handoff <goal>` distills the session into a compact hot-state-first prompt and starts a fresh session seeded with it (`PI_HANDOFF_MODEL`, `PI_HANDOFF_MAX_TOKENS`; adapted from [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions), tuned for mid-task continuation) |
 | [`subagents/`](extensions/subagents/) | `subagent` tool: delegate tasks to isolated `pi` subprocesses (single/parallel/chain), pinned to the `claude-bridge` provider by default; agent defs in [`agents/`](agents/) (adapted from [earendil-works/pi examples](https://github.com/earendil-works/pi/tree/main/packages/coding-agent/examples/extensions/subagent)) |
 
 ## Agents

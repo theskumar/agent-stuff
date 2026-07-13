@@ -49,6 +49,9 @@ done
 echo "==> Prompts → ~/.pi/agent/prompts/"
 for prompt in "$REPO_DIR"/prompts/*.md; do
   name="$(basename "$prompt")"
+  # handoff.md is Claude-only; pi uses the handoff.ts extension instead
+  # (symlinking both would register /handoff twice in pi).
+  [ "$name" = "handoff.md" ] && continue
   link "$prompt" "$HOME/.pi/agent/prompts/$name"
 done
 
