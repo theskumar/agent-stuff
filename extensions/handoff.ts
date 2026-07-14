@@ -338,14 +338,19 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      const newSessionResult = await ctx.newSession({ parentSession: currentSessionFile });
+      // After newSession() the captured ctx is stale; do post-replacement work
+      // via withSession using the fresh ctx it passes.
+      const newSessionResult = await ctx.newSession({
+        parentSession: currentSessionFile,
+        withSession: async (sessionCtx) => {
+          sessionCtx.ui.setEditorText(editedPrompt);
+          sessionCtx.ui.notify("Handoff ready. Submit when ready.", "info");
+        },
+      });
       if (newSessionResult.cancelled) {
+        // No replacement happened, so the original ctx is still valid here.
         ctx.ui.notify("New session cancelled", "info");
-        return;
       }
-
-      ctx.ui.setEditorText(editedPrompt);
-      ctx.ui.notify("Handoff ready. Submit when ready.", "info");
     },
   });
 }
