@@ -1,5 +1,9 @@
 # Global instructions
 
+## External research
+
+Use the `ketch` CLI for live-source research: `ketch search` (web), `ketch code` (OSS code), `ketch docs` (library docs), `ketch scrape`/`crawl` (pages to markdown). Load the `ketch` skill for the full playbook. Backends are preconfigured by the operator.
+
 ## Subagent delegation
 
 Applies only when a `subagent` tool is available; ignore otherwise.

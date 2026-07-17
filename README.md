@@ -86,13 +86,13 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
 | [`granola`](skills/granola/) | Extract and search Granola meeting transcripts from local cache |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
+| [`ketch`](skills/ketch/) | External research via `ketch` CLI: web search, OSS code search, library docs, scrape/crawl (vendored from [1broseidon/ketch](https://github.com/1broseidon/ketch)) |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
-| [`native-web-search`](skills/native-web-search/) | Trigger native web search |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
-| [`summarize`](skills/summarize/) | URL/PDF/DOCX to Markdown plus optional summary |
+| [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `ketch` for URLs |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |
