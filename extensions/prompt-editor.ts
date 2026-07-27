@@ -1079,6 +1079,19 @@ async function renameModeUI(
   }
 }
 
+/**
+ * ModelSelectorComponent's 4th constructor arg changed shape across pi versions:
+ *   - <= 0.80.x expected a ModelRegistry (find/getAvailable/getError/refresh)
+ *   - >= 0.82.x expects a ModelRuntime (getModel/getAvailableSnapshot/getError/refresh)
+ * ctx only exposes modelRegistry. On newer pi that registry is a thin facade wrapping
+ * a private `runtime` (the ModelRuntime the built-in selector uses); reuse it when
+ * present, otherwise fall back to the registry itself for older pi.
+ */
+function modelSelectorSource(ctx: ExtensionContext): any {
+  const registry = ctx.modelRegistry as any;
+  return registry?.runtime ?? registry;
+}
+
 async function pickModelForModeUI(
   ctx: ExtensionContext,
   spec: ModeSpec,
@@ -1097,7 +1110,7 @@ async function pickModelForModeUI(
         tui,
         currentModel,
         settingsManager,
-        ctx.modelRegistry as any,
+        modelSelectorSource(ctx),
         scopedModels as any,
         (model) => done({ provider: model.provider, modelId: model.id }),
         () => done(undefined),
