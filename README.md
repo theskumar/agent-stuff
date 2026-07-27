@@ -49,6 +49,7 @@ Subagent definitions for the `subagents` extension. Source: [`agents/`](agents/)
 | [`reviewer.md`](agents/reviewer.md) | sonnet-5 | Read-only code review |
 | [`planner.md`](agents/planner.md) | opus-4-8 | Implementation plans (high thinking) |
 | [`oracle.md`](agents/oracle.md) | fable-5 | Long-horizon complex work and decisions; costly, use sparingly |
+| [`research-scout.md`](agents/research-scout.md) | gpt-5.6-luna | Read-only, cited evidence gathering for substantial research tracks |
 
 ## Global AGENTS.md
 
