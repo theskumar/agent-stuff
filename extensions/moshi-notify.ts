@@ -20,6 +20,16 @@
  *   3. Optionally export MOSHI_UNIFIED=true to fan the push out to every
  *      device on the same Moshi license (default: only the token's device).
  *
+ * Away-from-desk gating (macOS):
+ *   Moshi usually mosh-es back into this same Mac, so a push while you are
+ *   sitting at the machine just duplicates the desktop notification (and
+ *   Continuity mirrors the iPhone banner onto the Mac anyway). So the push
+ *   only fires when you look away:
+ *     - HID idle time >= MOSHI_IDLE_SECONDS (default 300), or
+ *     - the screen is locked.
+ *   Overrides: MOSHI_NOTIFY=always (never gate) / never (disable).
+ *   On non-macOS, or if the idle probe fails, it falls back to sending.
+ *
  * Notes:
  *   - Silently no-ops if no token is found, so it's safe to leave installed
  *     on machines without Moshi configured.
@@ -29,14 +39,77 @@
  *     this only ever uses /api/webhook.
  */
 
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Markdown, type MarkdownTheme } from "@earendil-works/pi-tui";
 
 const WEBHOOK_URL = "https://api.getmoshi.app/api/webhook";
 const TOKEN_FILE = join(homedir(), ".config", "moshi", "device-token");
+const DEFAULT_IDLE_SECONDS = 300;
+
+const execFileAsync = promisify(execFile);
+
+const run = async (file: string, args: string[]): Promise<string | null> => {
+  try {
+    const { stdout } = await execFileAsync(file, args, { timeout: 2000 });
+    return stdout;
+  } catch {
+    return null;
+  }
+};
+
+/** Seconds since the last keyboard/mouse/trackpad event, or null if unknown. */
+const hidIdleSeconds = async (): Promise<number | null> => {
+  const out = await run("ioreg", ["-c", "IOHIDSystem", "-d", "4"]);
+  const match = out?.match(/"HIDIdleTime"\s*=\s*(\d+)/);
+  if (!match) {
+    return null;
+  }
+  return Number(match[1]) / 1e9;
+};
+
+const isScreenLocked = async (): Promise<boolean> => {
+  const out = await run("ioreg", ["-n", "Root", "-d1", "-r", "-k", "IOConsoleUsers"]);
+  return /CGSSessionScreenIsLocked"?\s*=\s*Yes/.test(out ?? "");
+};
+
+/**
+ * True when the user is not at the Mac this agent runs on, i.e. when a phone
+ * push is actually useful. Unknown states resolve to true so a broken probe
+ * degrades to the old always-notify behaviour.
+ */
+const isAwayFromDesk = async (): Promise<boolean> => {
+  if (process.platform !== "darwin") {
+    return true;
+  }
+
+  if (await isScreenLocked()) {
+    return true;
+  }
+
+  const idle = await hidIdleSeconds();
+  if (idle === null) {
+    return true;
+  }
+
+  const threshold = Number(process.env.MOSHI_IDLE_SECONDS ?? DEFAULT_IDLE_SECONDS);
+  return idle >= (Number.isFinite(threshold) ? threshold : DEFAULT_IDLE_SECONDS);
+};
+
+const shouldPush = async (): Promise<boolean> => {
+  const mode = process.env.MOSHI_NOTIFY;
+  if (mode === "never") {
+    return false;
+  }
+  if (mode === "always") {
+    return true;
+  }
+  return isAwayFromDesk();
+};
 
 const getApiToken = (): string | undefined => {
   if (process.env.MOSHI_API_TOKEN) {
@@ -146,6 +219,10 @@ const sendMoshiPush = async (title: string, message: string): Promise<void> => {
 
 export default function (pi: ExtensionAPI) {
   pi.on("agent_end", async (event) => {
+    if (!(await shouldPush())) {
+      return;
+    }
+
     const lastText = extractLastAssistantText(event.messages ?? []);
     const { title, message } = formatNotification(lastText);
     await sendMoshiPush(title, message);
