@@ -8,7 +8,7 @@ Use the `ketch` CLI for live-source research: `ketch search` (web), `ketch code`
 
 Applies only when a `subagent` tool is available; ignore otherwise.
 
-- Delegate self-contained, token-heavy work to keep your own context small: scout for multi-file codebase recon, planner for implementation plans, worker for executing an approved plan, reviewer for code review.
-- Run independent tasks in parallel via `tasks[]`; use chain mode with the `{previous}` placeholder for scout -> planner -> worker handoffs.
-- Reserve oracle for long-horizon, complex problems that cheaper agents cannot handle; it is slow and costly.
+- Delegate self-contained, token-heavy work to keep your own context small: multi-file codebase recon, implementation plans, executing an approved plan, code review.
+- Calls are serialized — one child at a time. Prefer several small delegations over asking one child to orchestrate other children.
+- Spell the task out in full; the child inherits no conversation history, only the task text.
 - Do not delegate trivial lookups that a single read or grep answers; subprocess overhead outweighs the benefit.
