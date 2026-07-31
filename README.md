@@ -22,7 +22,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`session-name.ts`](extensions/session-name.ts) | `Ctrl+Shift+N` prefilled session rename dialog; mirrors the session name into the tmux window name (restores the prior name on quit) |
 | [`tree-fast-summary.ts`](extensions/tree-fast-summary.ts) | Route `/tree` branch summarization through the `fast` mode in `modes.json` (project then global) instead of the main model, with a hard-coded fallback |
 | [`titlebar-spinner.ts`](extensions/titlebar-spinner.ts) | Braille spinner in terminal title while agent works |
-| [`notify.ts`](extensions/notify.ts) | OSC 777 desktop notification on turn end |
+| [`notify.ts`](extensions/notify.ts) | Desktop notification on turn end, titled with the tmux target; clicking jumps back to the firing `session:window.pane` when `terminal-notifier` is installed, else plain OSC 777 |
 | [`moshi-notify.ts`](extensions/moshi-notify.ts) | Push notification to [Moshi](https://getmoshi.app) iOS app on turn end via webhook, only when away from the desk — idle or screen locked (`MOSHI_API_TOKEN`, optional `MOSHI_UNIFIED=true`, `MOSHI_IDLE_SECONDS=300`, `MOSHI_NOTIFY=always\|never`) |
 | [`snake.ts`](extensions/snake.ts) | `/snake` game |
 | [`uv.ts`](extensions/uv.ts) | Force Python tooling through `uv` |
