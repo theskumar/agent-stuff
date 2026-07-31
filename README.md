@@ -19,6 +19,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
 | [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
 | [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history, low-battery indicator (`.pi/battery.json` / `PI_BATTERY_THRESHOLD` / `PI_BATTERY_DISABLE`) |
+| [`session-name.ts`](extensions/session-name.ts) | `Ctrl+Shift+N` prefilled session rename dialog; mirrors the session name into the tmux window name (restores the prior name on quit) |
 | [`tree-fast-summary.ts`](extensions/tree-fast-summary.ts) | Route `/tree` branch summarization through the `fast` mode in `modes.json` (project then global) instead of the main model, with a hard-coded fallback |
 | [`titlebar-spinner.ts`](extensions/titlebar-spinner.ts) | Braille spinner in terminal title while agent works |
 | [`notify.ts`](extensions/notify.ts) | OSC 777 desktop notification on turn end |
@@ -88,7 +89,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`granola`](skills/granola/) | Extract and search Granola meeting transcripts from local cache |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
 | [`ketch`](skills/ketch/) | External research via `ketch` CLI: web search, OSS code search, library docs, scrape/crawl (vendored from [1broseidon/ketch](https://github.com/1broseidon/ketch)) |
-| [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts |
+| [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts (GitHub, GitLab, Codeberg, Bitbucket, sourcehut, self-hosted) |
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
