@@ -40,16 +40,15 @@
  *   - Tail-shaped bloat where a clean cut point exists → split-fork + rewind.
  */
 
-import {
-  type Api,
-  type ImageContent,
-  type Message,
-  type Model,
-  type TextContent,
-  type ToolCall,
-  type ToolResultMessage,
-  type UserMessage,
-  complete,
+import type {
+  Api,
+  ImageContent,
+  Message,
+  Model,
+  TextContent,
+  ToolCall,
+  ToolResultMessage,
+  UserMessage,
 } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
@@ -297,7 +296,11 @@ export default function (pi: ExtensionAPI) {
             timestamp: Date.now(),
           };
 
-          const response = await complete(
+          // Route through the coding-agent runtime, not pi-ai's raw complete():
+          // custom providers (e.g. claude-bridge) are registered in the runtime,
+          // not in pi-ai's api-registry, so raw complete() throws
+          // "No API provider registered for api: <provider>".
+          const response = await ctx.modelRegistry.complete(
             selection.model,
             { systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
             { apiKey: selection.apiKey, headers: selection.headers, signal: loader.signal },
