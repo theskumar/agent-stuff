@@ -33,6 +33,18 @@ function parseArgs(argv) {
     if (a === '--parent') { opts.parent = argv[++i]; continue; }
     if (a === '--content') { opts.content = argv[++i]; continue; }
     if (a === '--allow-deleting-content') { opts.allowDeletingContent = true; continue; }
+    if (a === '--after') { opts.after = argv[++i]; continue; }
+    if (a === '--markdown') { opts.markdown = argv[++i]; continue; }
+    if (a === '--external-url') { opts.externalUrl = argv[++i]; continue; }
+    if (a === '--start-cursor') { opts.startCursor = argv[++i]; continue; }
+    if (a === '--filter') { opts.filter = argv[++i]; continue; }
+    if (a === '--sort') { (opts.sort ||= []).push(argv[++i]); continue; }
+    if (a === '--limit') {
+      const n = Number(argv[++i]);
+      if (!Number.isInteger(n) || n < 1) throw new Error('--limit must be a positive integer');
+      opts.limit = n;
+      continue;
+    }
     if (a === '--yes') { opts.yes = true; continue; }
     if (a === '--no-yes') { opts.yes = false; continue; }
     if (a === '-h' || a === '--help') { opts.help = true; continue; }
@@ -127,6 +139,17 @@ function buildExecHelper() {
       update: ntn.pageUpdate,
       trash: ntn.pageTrash,
     },
+    blocks: {
+      list: ntn.blocksList,
+      append: ntn.blocksAppend,
+      update: ntn.blockUpdate,
+      delete: ntn.blockDelete,
+    },
+    comments: {
+      list: ntn.commentsList,
+      add: ntn.commentAdd,
+    },
+    search: ntn.search,
     datasources: {
       resolve: ntn.datasourcesResolve,
       query: ntn.datasourcesQuery,
@@ -134,6 +157,7 @@ function buildExecHelper() {
     files: {
       list: ntn.filesList,
       get: ntn.filesGet,
+      create: ntn.filesCreate,
     },
     api,
   };
@@ -150,10 +174,23 @@ Usage:
   node scripts/notion.js page create --parent <page:id|database:id|data-source:id> [--content <md>]
   node scripts/notion.js page update <id-or-url> [--content <md>] [--allow-deleting-content]
   node scripts/notion.js page trash <id-or-url> [--no-yes]
+  node scripts/notion.js blocks list <id-or-url> [--limit N] [--json]
+  node scripts/notion.js blocks append <id-or-url> [--after <block-id>] [--content <json>]
+  node scripts/notion.js blocks update <block-id> [--content <json>]
+  node scripts/notion.js blocks delete <block-id>
+  node scripts/notion.js db resolve <database-id>
+  node scripts/notion.js db query <data-source-id> [--filter <json|->] [--sort <s>] [--limit N] [--start-cursor <c>]
+  node scripts/notion.js comment list <id-or-url> [--json]
+  node scripts/notion.js comment add <id-or-url> [--markdown <text>]
+  node scripts/notion.js search <query...> [--limit N] [--json]
   node scripts/notion.js files list
   node scripts/notion.js files get <upload-id>
+  node scripts/notion.js files create <path> | files create --external-url <url>
   node scripts/notion.js api <method> <path> [--content <json>]
   node scripts/notion.js exec [--script '...'] [--timeout 30000]
+
+blocks append/update read children/payload JSON from stdin if --content omitted.
+Search as the user (ranked, beyond PAT visibility): node scripts/notion-mcp.mjs search <query>
 
 Page create/update read markdown from stdin if --content omitted.
 \`api\` reads JSON body from stdin if --content omitted.
@@ -166,8 +203,8 @@ Requires the official Notion CLI (ntn). Install: curl -fsSL https://ntn.dev | ba
 Exec example:
   node scripts/notion.js exec <<'JS'
   const md = await notion.page.get('https://www.notion.so/...');
-  const users = await notion.api('GET', 'v1/users', null, { query: { page_size: 5 } });
-  return { md_chars: md.length, user_count: users.results.length };
+  const hits = await notion.search('roadmap', { pageSize: 5 });
+  return { md_chars: md.length, hit_count: hits.results.length };
   JS
 `);
 }
@@ -236,7 +273,137 @@ async function cmdFiles(opts, positional) {
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
     return;
   }
-  throw new Error(`Unknown files subcommand: ${sub}. Use list|get.`);
+  if (sub === 'create') {
+    if (opts.externalUrl) {
+      const out = await ntn.filesCreate({ externalUrl: opts.externalUrl });
+      console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
+      return;
+    }
+    const filePath = positional[1];
+    if (!filePath) throw new Error('Usage: files create <path> | files create --external-url <url>');
+    const out = await ntn.filesCreate({ filePath });
+    console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
+    return;
+  }
+  throw new Error(`Unknown files subcommand: ${sub}. Use list|get|create.`);
+}
+
+function plainText(rt) {
+  return Array.isArray(rt) ? rt.map((x) => x.plain_text || '').join('') : '';
+}
+
+function extractTitle(obj) {
+  if (Array.isArray(obj.title)) return plainText(obj.title) || '(untitled)';
+  const props = obj.properties || {};
+  for (const v of Object.values(props)) {
+    if (v && v.type === 'title') return plainText(v.title) || '(untitled)';
+  }
+  return '(untitled)';
+}
+
+async function cmdBlocks(opts, positional) {
+  const sub = positional[0];
+  const target = positional[1];
+
+  if (sub === 'list') {
+    if (!target) throw new Error('Usage: blocks list <id-or-url>');
+    const res = await ntn.blocksList(target, { pageSize: opts.limit || 100, startCursor: opts.startCursor });
+    if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+    const txt = (b) => { const t = b[b.type]; const rt = (t && t.rich_text) || []; return plainText(rt).slice(0, 60); };
+    const lines = (res.results || []).map((b) => `${b.type}\t${b.id}\t${txt(b)}`);
+    if (res.has_more) lines.push(`\n(has_more; next_cursor=${res.next_cursor})`);
+    console.log(lines.join('\n'));
+    return;
+  }
+
+  if (sub === 'append') {
+    if (!target) throw new Error('Usage: blocks append <id-or-url> [--after <block-id>] (children JSON via --content or stdin)');
+    const raw = await readContent(opts);
+    let children;
+    try {
+      const parsed = JSON.parse(raw);
+      children = Array.isArray(parsed) ? parsed : parsed.children;
+    } catch (e) {
+      throw new Error(`blocks append: children must be a JSON array (or {"children":[...]}): ${e.message}`);
+    }
+    const res = await ntn.blocksAppend(target, { children, after: opts.after });
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (sub === 'update') {
+    if (!target) throw new Error('Usage: blocks update <block-id> (payload JSON via --content or stdin)');
+    const raw = await readContent(opts);
+    let payload;
+    try { payload = JSON.parse(raw); } catch (e) { throw new Error(`blocks update: payload must be JSON: ${e.message}`); }
+    const res = await ntn.blockUpdate(target, payload);
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (sub === 'delete') {
+    if (!target) throw new Error('Usage: blocks delete <block-id>');
+    const res = await ntn.blockDelete(target);
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  throw new Error(`Unknown blocks subcommand: ${sub}. Use list|append|update|delete.`);
+}
+
+async function cmdDb(opts, positional) {
+  const sub = positional[0];
+  if (sub === 'resolve') {
+    const dbId = positional[1];
+    if (!dbId) throw new Error('Usage: db resolve <database-id>');
+    console.log(await ntn.datasourcesResolve(dbId));
+    return;
+  }
+  if (sub === 'query') {
+    const dsId = positional[1];
+    if (!dsId) throw new Error('Usage: db query <data-source-id> [--filter <json|->] [--sort <s>] [--limit N] [--start-cursor <c>]');
+    let filter;
+    if (opts.filter !== undefined) filter = opts.filter === '-' ? await readStdinText() : opts.filter;
+    const res = await ntn.datasourcesQuery(dsId, {
+      limit: opts.limit,
+      startCursor: opts.startCursor,
+      sort: opts.sort,
+      filter,
+    });
+    console.log(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
+    return;
+  }
+  throw new Error(`Unknown db subcommand: ${sub}. Use resolve|query.`);
+}
+
+async function cmdComment(opts, positional) {
+  const sub = positional[0];
+  const target = positional[1];
+  if (sub === 'list') {
+    if (!target) throw new Error('Usage: comment list <id-or-url>');
+    const res = await ntn.commentsList(target, { startCursor: opts.startCursor });
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+  if (sub === 'add') {
+    if (!target) throw new Error('Usage: comment add <id-or-url> [--markdown <text>]');
+    let markdown = opts.markdown;
+    if (markdown === undefined) { const s = await readStdinText(); if (s.trim()) markdown = s; }
+    if (!markdown) throw new Error('comment add: provide --markdown "..." or pipe text via stdin');
+    const res = await ntn.commentAdd(target, { markdown });
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+  throw new Error(`Unknown comment subcommand: ${sub}. Use list|add.`);
+}
+
+async function cmdSearch(opts, positional) {
+  const query = positional.join(' ').trim();
+  const res = await ntn.search(query || undefined, { pageSize: opts.limit, startCursor: opts.startCursor });
+  if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+  const lines = (res.results || []).map((r) => `${r.object}\t${r.id}\t${extractTitle(r)}\t${r.url || ''}`);
+  if (res.has_more) lines.push(`\n(has_more; next_cursor=${res.next_cursor})`);
+  console.log(lines.join('\n') || '(no results)');
 }
 
 async function cmdApi(opts, positional) {
@@ -325,6 +492,10 @@ async function main() {
   if (!cmd || opts.help || cmd === 'help') return printHelp();
   if (cmd === 'whoami') return cmdWhoami();
   if (cmd === 'page') return cmdPage(opts, rest);
+  if (cmd === 'blocks') return cmdBlocks(opts, rest);
+  if (cmd === 'db') return cmdDb(opts, rest);
+  if (cmd === 'comment') return cmdComment(opts, rest);
+  if (cmd === 'search') return cmdSearch(opts, rest);
   if (cmd === 'files') return cmdFiles(opts, rest);
   if (cmd === 'api') return cmdApi(opts, rest);
   if (cmd === 'exec') return cmdExec(opts, rest);

@@ -19,6 +19,7 @@
 //   whoAmI()                          -> identity tab-separated string
 
 const { spawnSync, spawn } = require('node:child_process');
+const fs = require('node:fs');
 
 const UUID_RE =
   /([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i;
@@ -100,7 +101,9 @@ function runNtn({ args, stdin, json = false }) {
       resolve(out);
     });
     if (stdin !== undefined) {
-      child.stdin.end(typeof stdin === 'string' ? stdin : String(stdin));
+      child.stdin.end(
+        Buffer.isBuffer(stdin) ? stdin : typeof stdin === 'string' ? stdin : String(stdin),
+      );
     }
   });
 }
@@ -205,6 +208,91 @@ async function filesGet(uploadId) {
   return tryParseJson(stdout);
 }
 
+// Upload a file via `ntn files create`. Pass a local path or an external URL.
+async function filesCreate({ filePath, externalUrl } = {}) {
+  if (externalUrl) {
+    const { stdout } = await runNtn({ args: ['files', 'create', '--external-url', externalUrl] });
+    return tryParseJson(stdout);
+  }
+  if (!filePath) throw new Error('filesCreate: filePath or externalUrl required');
+  const data = fs.readFileSync(filePath);
+  const { stdout } = await runNtn({ args: ['files', 'create'], stdin: data });
+  return tryParseJson(stdout);
+}
+
+// ---------- blocks (surgical edits) ----------
+
+// List a page's (or block's) direct children. Returns the raw list response.
+async function blocksList(idOrUrl, { pageSize = 100, startCursor } = {}) {
+  const pid = parsePageId(idOrUrl);
+  const query = { page_size: pageSize };
+  if (startCursor) query.start_cursor = startCursor;
+  return apiCall('GET', `v1/blocks/${pid}/children`, null, { query });
+}
+
+// Append blocks. Passing `after` inserts mid-page and forces the 2022-06-28
+// API version (the default version rejects `after`). Omit it to append at end.
+async function blocksAppend(idOrUrl, { children, after } = {}) {
+  const pid = parsePageId(idOrUrl);
+  if (!Array.isArray(children) || children.length === 0) {
+    throw new Error('blocksAppend: non-empty children array required');
+  }
+  const body = { children };
+  const opts = {};
+  if (after) {
+    body.after = parsePageId(after);
+    opts.notionVersion = '2022-06-28';
+  }
+  return apiCall('PATCH', `v1/blocks/${pid}/children`, body, opts);
+}
+
+// Update a single block's payload, e.g. { paragraph: { rich_text: [...] } }.
+async function blockUpdate(blockId, payload) {
+  if (!blockId) throw new Error('blockUpdate: block id required');
+  if (!payload || typeof payload !== 'object') throw new Error('blockUpdate: payload object required');
+  return apiCall('PATCH', `v1/blocks/${parsePageId(blockId)}`, payload);
+}
+
+// Archive (delete) a single block.
+async function blockDelete(blockId) {
+  if (!blockId) throw new Error('blockDelete: block id required');
+  return apiCall('DELETE', `v1/blocks/${parsePageId(blockId)}`);
+}
+
+// ---------- comments ----------
+
+async function commentsList(idOrUrl, { startCursor, pageSize } = {}) {
+  const pid = parsePageId(idOrUrl);
+  const query = { block_id: pid };
+  if (startCursor) query.start_cursor = startCursor;
+  if (pageSize) query.page_size = pageSize;
+  return apiCall('GET', 'v1/comments', null, { query });
+}
+
+async function commentAdd(idOrUrl, { markdown, richText, discussionId } = {}) {
+  const pid = parsePageId(idOrUrl);
+  const body = {};
+  if (discussionId) body.discussion_id = discussionId;
+  else body.parent = { page_id: pid };
+  if (markdown) body.markdown = markdown;
+  else if (richText) body.rich_text = richText;
+  else throw new Error('commentAdd: markdown or richText required');
+  return apiCall('POST', 'v1/comments', body);
+}
+
+// ---------- search (keyword; workspace-only) ----------
+// Notion REST search is keyword + workspace-only. For semantic search across
+// connected sources use the MCP fallback (scripts/notion-mcp.mjs search).
+async function search(query, { filter, sort, pageSize, startCursor } = {}) {
+  const body = {};
+  if (query) body.query = query;
+  if (filter) body.filter = filter;
+  if (sort) body.sort = sort;
+  if (pageSize) body.page_size = pageSize;
+  if (startCursor) body.start_cursor = startCursor;
+  return apiCall('POST', 'v1/search', body);
+}
+
 // ---------- api ----------
 
 // Generic Notion API passthrough via `ntn api`. Replaces raw fetch.
@@ -272,6 +360,14 @@ module.exports = {
   datasourcesQuery,
   filesList,
   filesGet,
+  filesCreate,
+  blocksList,
+  blocksAppend,
+  blockUpdate,
+  blockDelete,
+  commentsList,
+  commentAdd,
+  search,
   apiCall,
   apiMeta,
   whoAmI,
