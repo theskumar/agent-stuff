@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import type { Stats } from "node:fs";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,7 +23,16 @@ const CHILD_ENV = "PI_TMUX_SUBAGENT_CHILD";
 const RESULT_ENV = "PI_TMUX_SUBAGENT_RESULT";
 const RUNS_DIR = "tmux-subagents";
 const POLL_INTERVAL_MS = 500;
-const PANE_PREVIEW_LINES = 18;
+const PREVIEW_BODY_LINES = 6;
+// Finished children keep their tmux session so the pane stays readable after the
+// fact. Nothing else reaps them, and they are visible in the parent's own tmux
+// server, so sweep the stale ones at startup.
+const REAP_SESSION_AGE_MS = 2 * 60 * 60 * 1000;
+const REAP_RUN_DIR_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// herdr has no `pane_dead` flag. Once the child command returns, the pane drops
+// back to its shell prompt; if it is back at the shell this long after launch we
+// treat the child as exited even if we never sampled it mid-run.
+const HERDR_STARTUP_GRACE_MS = 5_000;
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 const EXTENSION_PATH = fileURLToPath(import.meta.url);
 
@@ -46,13 +55,14 @@ interface RunDetails {
   status: RunStatus;
   task: string;
   cwd: string;
-  tmuxSession: string;
+  label: string;
   attachCommand: string;
   captureCommand: string;
   killCommand: string;
   provider: string;
   model: string;
   thinking: string;
+  agentStatus?: string;
   pane?: string;
   output?: string;
   sessionFile?: string;
@@ -64,8 +74,7 @@ interface RunSpec {
   task: string;
   cwd: string;
   attachmentId: string;
-  tmuxSession: string;
-  tmuxTarget: string;
+  label: string;
   attachCommand: string;
   captureCommand: string;
   killCommand: string;
@@ -75,13 +84,40 @@ interface RunSpec {
   trusted: boolean;
 }
 
+/**
+ * A live child pane, addressed differently per backend. `create()` fills in the
+ * real target; the other fields hold backend-private bookkeeping.
+ */
+interface RunHandle {
+  /** Send/capture/exit-check target: a tmux or herdr pane id. */
+  paneId: string;
+  /** tmux session name (kill target); unused by herdr. */
+  session?: string;
+  /** tmux window id (remain-on-exit target); unused by herdr. */
+  windowId?: string;
+  /** herdr exit guard: set once the child was observed running. */
+  sawRunning?: boolean;
+  /** herdr exit guard anchor: when the launch command was submitted. */
+  launchedAt?: number;
+}
+
 function shellQuote(value: string): string {
   if (value.length === 0) return "''";
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-function tmuxSocketPath(): string {
+function privateTmuxSocketPath(): string {
   return path.join(getAgentDir(), "tmux-subagents.sock");
+}
+
+/**
+ * Children run on the parent's tmux server whenever the parent is itself inside
+ * tmux, so `pi --attach-subagent` can `switch-client` instead of nesting a
+ * second tmux client inside the caller's pane. Only a parent started outside
+ * tmux falls back to the private socket.
+ */
+function tmuxSocketPath(): string {
+  return currentTmuxSocket() ?? privateTmuxSocketPath();
 }
 
 function tmuxSessionName(sessionId: string): string {
@@ -91,6 +127,50 @@ function tmuxSessionName(sessionId: string): string {
 function currentTmuxSocket(): string | undefined {
   const socket = process.env.TMUX?.split(",", 1)[0]?.trim();
   return socket || undefined;
+}
+
+function runsRoot(): string {
+  return path.join(getAgentDir(), RUNS_DIR);
+}
+
+/**
+ * Children can live on any tmux server, so each run records the socket it was
+ * created on. Attaching resolves the socket from that record rather than
+ * guessing, which keeps `pi --attach-subagent` working from a plain terminal.
+ */
+function findRecordedSocket(childSessionId: string): string | undefined {
+  let parents: string[];
+  try {
+    parents = readdirSync(runsRoot());
+  } catch {
+    return undefined;
+  }
+  for (const parent of parents) {
+    const metaPath = path.join(runsRoot(), parent, childSessionId, "meta.json");
+    try {
+      const meta = JSON.parse(readFileSync(metaPath, "utf8")) as { socket?: unknown };
+      if (typeof meta.socket === "string" && meta.socket) return meta.socket;
+    } catch {
+      // Not this parent, or the run predates meta.json.
+    }
+  }
+  return undefined;
+}
+
+function socketHasSession(socket: string, session: string): boolean {
+  const probe = spawnSync("tmux", ["-S", socket, "has-session", "-t", session], {
+    stdio: "ignore",
+  });
+  return probe.status === 0;
+}
+
+function resolveAttachSocket(session: string, childSessionId: string): string {
+  const recorded = findRecordedSocket(childSessionId);
+  if (recorded && socketHasSession(recorded, session)) return recorded;
+  for (const candidate of [currentTmuxSocket(), privateTmuxSocketPath()]) {
+    if (candidate && socketHasSession(candidate, session)) return candidate;
+  }
+  return recorded ?? tmuxSocketPath();
 }
 
 function attachFlagValue(argv: string[]): string | undefined {
@@ -115,13 +195,6 @@ function tmuxArgs(...args: string[]): string[] {
   return ["-S", tmuxSocketPath(), ...args];
 }
 
-function updateTmuxCommands(spec: RunSpec): void {
-  const tmux = tmuxCommandPrefix();
-  spec.attachCommand = `pi --${ATTACH_FLAG} ${shellQuote(spec.attachmentId)}`;
-  spec.captureCommand = `${tmux} capture-pane -p -J -t ${shellQuote(spec.tmuxTarget)}`;
-  spec.killCommand = `${tmux} kill-session -t ${shellQuote(spec.tmuxSession)}`;
-}
-
 function attachToSubagentAndExit(rawTarget: string): never {
   const target = rawTarget.trim();
   if (!target) {
@@ -129,7 +202,7 @@ function attachToSubagentAndExit(rawTarget: string): never {
     process.exit(2);
   }
 
-  let socket = tmuxSocketPath();
+  let socket: string | undefined;
   let session: string;
   if (target.startsWith("v1.")) {
     // Keep attachment working for sessions started before session-id targets.
@@ -157,6 +230,7 @@ function attachToSubagentAndExit(rawTarget: string): never {
       process.exit(2);
     }
     session = tmuxSessionName(target);
+    socket = resolveAttachSocket(session, target);
   }
 
   const sameServer = currentTmuxSocket() === socket;
@@ -272,11 +346,112 @@ function registerChildReporter(pi: ExtensionAPI, resultPath: string): void {
   });
 }
 
-function trimPane(output: string): string {
-  const lines = output.replace(/\r/g, "").split("\n");
-  while (lines.length > 0 && !lines[0]?.trim()) lines.shift();
-  while (lines.length > 0 && !lines[lines.length - 1]?.trim()) lines.pop();
-  return lines.slice(-PANE_PREVIEW_LINES).join("\n");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function newestSessionFile(sessionDir: string): string | undefined {
+  let entries: string[];
+  try {
+    entries = readdirSync(sessionDir);
+  } catch {
+    return undefined;
+  }
+  // Session filenames start with an ISO timestamp, so lexical order is chronological.
+  const newest = entries
+    .filter((name) => name.endsWith(".jsonl"))
+    .sort()
+    .at(-1);
+  return newest ? path.join(sessionDir, newest) : undefined;
+}
+
+function clip(value: string, max: number): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max)}\u2026` : text;
+}
+
+function toolArgSummary(args: unknown): string {
+  if (!isRecord(args)) return "";
+  const preferred = ["command", "cmd", "script", "path", "file", "pattern", "query", "url", "task"];
+  let value: unknown;
+  for (const key of preferred) {
+    if (typeof args[key] === "string" && args[key]) {
+      value = args[key];
+      break;
+    }
+  }
+  if (value === undefined) {
+    value =
+      Object.values(args).find((entry) => typeof entry === "string" && entry) ??
+      JSON.stringify(args);
+  }
+  return clip(String(value), 100);
+}
+
+/**
+ * A clean, structured live preview built from the child's own session JSONL,
+ * which is far more useful than scraping its full-screen TUI. Works for every
+ * backend because the child always writes to a known session dir.
+ */
+function readSessionActivity(sessionDir: string): string | undefined {
+  const file = newestSessionFile(sessionDir);
+  if (!file) return undefined;
+  let content: string;
+  try {
+    content = readFileSync(file, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  let steps = 0;
+  let body: string | undefined;
+  let tool: { name: string; summary: string } | undefined;
+  let result: string | undefined;
+
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(entry) || entry.type !== "message" || !isRecord(entry.message)) continue;
+    const message = entry.message;
+    const parts = Array.isArray(message.content) ? message.content : [];
+    if (message.role === "assistant") {
+      for (const part of parts) {
+        if (!isRecord(part)) continue;
+        if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
+          body = part.text.trim();
+        } else if (
+          part.type === "thinking" &&
+          typeof part.thinking === "string" &&
+          part.thinking.trim()
+        ) {
+          body = `\u{1f4ad} ${part.thinking.trim()}`;
+        } else if (part.type === "toolCall" && typeof part.name === "string") {
+          steps++;
+          tool = { name: part.name, summary: toolArgSummary(part.arguments) };
+        }
+      }
+    } else if (message.role === "toolResult") {
+      for (const part of parts) {
+        if (!isRecord(part)) continue;
+        if (part.type === "text" && typeof part.text === "string" && part.text.trim()) {
+          result = clip(part.text.trim().split("\n")[0] ?? "", 100);
+        }
+      }
+    }
+  }
+
+  const lines: string[] = [];
+  if (body) lines.push(...body.split("\n").slice(-PREVIEW_BODY_LINES));
+  if (tool) lines.push(`\u2192 ${tool.name}${tool.summary ? `: ${tool.summary}` : ""}`);
+  if (result) lines.push(`\u2190 ${result}`);
+  if (steps > 0) lines.push(`(${steps} tool call${steps === 1 ? "" : "s"})`);
+  const summary = lines.join("\n").trim();
+  return summary || undefined;
 }
 
 function formatDuration(
@@ -295,7 +470,7 @@ function detailsFor(spec: RunSpec, status: RunStatus, extra: Partial<RunDetails>
     status,
     task: spec.task,
     cwd: spec.cwd,
-    tmuxSession: spec.tmuxSession,
+    label: spec.label,
     attachCommand: spec.attachCommand,
     captureCommand: spec.captureCommand,
     killCommand: spec.killCommand,
@@ -308,7 +483,7 @@ function detailsFor(spec: RunSpec, status: RunStatus, extra: Partial<RunDetails>
 
 function partialText(details: RunDetails): string {
   const lines = [
-    `Subagent ${details.status} in tmux session ${details.tmuxSession}.`,
+    `Subagent ${details.status}${details.agentStatus ? ` · ${details.agentStatus}` : ""} in ${details.label}.`,
     `Attach: ${details.attachCommand}`,
     `Capture: ${details.captureCommand}`,
   ];
@@ -330,7 +505,7 @@ function resultText(details: RunDetails): string {
   const lines = [
     `Subagent ${details.status}${duration ? ` after ${duration}` : ""}.`,
     `Model: ${details.provider}/${details.model} (${details.thinking})`,
-    `tmux: ${details.tmuxSession}`,
+    `Session: ${details.label}`,
     `Attach: ${details.attachCommand}`,
     `Capture: ${details.captureCommand}`,
     `Clean up: ${details.killCommand}`,
@@ -355,6 +530,27 @@ async function abortableDelay(ms: number, signal: AbortSignal | undefined): Prom
     };
     signal?.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+/** Delete run dirs nobody will read again. Backend-agnostic. */
+async function reapStaleRunDirs(): Promise<void> {
+  const now = Date.now();
+  let parents: string[];
+  try {
+    parents = readdirSync(runsRoot());
+  } catch {
+    return;
+  }
+  for (const parent of parents) {
+    const parentDir = path.join(runsRoot(), parent);
+    try {
+      const info = await stat(parentDir);
+      if (now - info.mtimeMs < REAP_RUN_DIR_AGE_MS) continue;
+      await rm(parentDir, { recursive: true, force: true });
+    } catch {
+      // Raced with another pi process, or not ours to delete.
+    }
+  }
 }
 
 async function validateCwd(cwd: string): Promise<void> {
@@ -406,6 +602,298 @@ function resolveModel(
   return { provider, model };
 }
 
+/**
+ * The terminal multiplexer that hosts child panes. tmux runs children in
+ * detached sessions on a private (or the caller's) socket; herdr runs them in a
+ * background tab of the current session and knows pi natively. Both keep the
+ * `result.json` IPC from `registerChildReporter` as the authoritative output.
+ */
+interface Backend {
+  readonly kind: "tmux" | "herdr";
+  /** Whether to close the child pane once the run settles (herdr has no reaper). */
+  readonly autoCloseOnSettle: boolean;
+  /** Throw a clear error if the multiplexer is unavailable. */
+  ensureAvailable(pi: ExtensionAPI): Promise<void>;
+  /** Wrap the `env ... pi ...` string into the shell command actually launched. */
+  wrapLaunch(command: string): string;
+  /** Placeholder handle used for command previews before the pane exists. */
+  initialHandle(sessionName: string): RunHandle;
+  /** Create the pane/session, mutating `handle` with the real target. */
+  create(pi: ExtensionAPI, opts: { cwd: string; label: string; handle: RunHandle }): Promise<void>;
+  /** Send and submit the launch command in the child pane. */
+  launch(pi: ExtensionAPI, handle: RunHandle, command: string): Promise<void>;
+  /** Whether the child process has exited (pane dead / shell prompt returned). */
+  hasExited(pi: ExtensionAPI, handle: RunHandle): Promise<boolean>;
+  /** Native lifecycle status for the header (herdr: idle/working/blocked/done). */
+  statusHint(pi: ExtensionAPI, handle: RunHandle): Promise<string | undefined>;
+  /** Tear the pane/session down. */
+  close(pi: ExtensionAPI, handle: RunHandle): Promise<void>;
+  /** Human-facing attach/capture/cleanup command hints. */
+  commands(
+    handle: RunHandle,
+    attachmentId: string,
+  ): { attach: string; capture: string; kill: string };
+  /** Short label shown as the run title. */
+  label(handle: RunHandle): string;
+  /** Optional startup housekeeping (kill stale sessions). */
+  reap(pi: ExtensionAPI): Promise<void>;
+}
+
+const tmuxBackend: Backend = {
+  kind: "tmux",
+  autoCloseOnSettle: false,
+  async ensureAvailable(pi) {
+    const version = await pi.exec("tmux", ["-V"], { timeout: 5_000 });
+    if (version.code !== 0) {
+      throw new Error(
+        `tmux is required for subagents: ${version.stderr.trim() || "tmux not found"}`,
+      );
+    }
+  },
+  wrapLaunch(command) {
+    return `exec ${command}`;
+  },
+  initialHandle(sessionName) {
+    // Until the pane exists, address the session by name so preview commands work.
+    return { paneId: sessionName, session: sessionName };
+  },
+  async create(pi, { cwd, handle }) {
+    const session = handle.session ?? handle.paneId;
+    const created = await pi.exec(
+      "tmux",
+      tmuxArgs(
+        "new-session",
+        "-d",
+        "-s",
+        session,
+        "-n",
+        "pi",
+        "-c",
+        cwd,
+        "-P",
+        "-F",
+        "#{window_id} #{pane_id}",
+      ),
+    );
+    if (created.code !== 0) {
+      throw new Error(
+        `Failed to create tmux session: ${created.stderr.trim() || created.stdout.trim()}`,
+      );
+    }
+    // base-index/pane-base-index are user settings, so window/pane indices cannot
+    // be assumed to be 0; read the real ids that new-session reports.
+    const [windowId, paneId] = created.stdout.trim().split(/\s+/, 2);
+    if (!windowId || !paneId) {
+      throw new Error(`tmux did not report the new window and pane: ${created.stdout.trim()}`);
+    }
+    handle.windowId = windowId;
+    handle.paneId = paneId;
+    handle.session = session;
+    const remain = await pi.exec(
+      "tmux",
+      tmuxArgs("set-window-option", "-t", windowId, "remain-on-exit", "on"),
+    );
+    if (remain.code !== 0) {
+      throw new Error(remain.stderr.trim() || "Failed to set remain-on-exit.");
+    }
+  },
+  async launch(pi, handle, command) {
+    const sent = await pi.exec(
+      "tmux",
+      tmuxArgs("send-keys", "-t", handle.paneId, "-l", "--", command),
+    );
+    if (sent.code !== 0) throw new Error(sent.stderr.trim() || "Failed to start child Pi.");
+    const entered = await pi.exec("tmux", tmuxArgs("send-keys", "-t", handle.paneId, "Enter"));
+    if (entered.code !== 0) {
+      throw new Error(entered.stderr.trim() || "Failed to submit child command.");
+    }
+  },
+  async hasExited(pi, handle) {
+    const dead = await pi.exec(
+      "tmux",
+      tmuxArgs("display-message", "-p", "-t", handle.paneId, "#{pane_dead}"),
+    );
+    return dead.code === 0 && dead.stdout.trim() === "1";
+  },
+  async statusHint() {
+    // tmux has no native notion of agent lifecycle state.
+    return undefined;
+  },
+  async close(pi, handle) {
+    if (handle.session) await pi.exec("tmux", tmuxArgs("kill-session", "-t", handle.session));
+  },
+  commands(handle, attachmentId) {
+    const tmux = tmuxCommandPrefix();
+    return {
+      attach: `pi --${ATTACH_FLAG} ${shellQuote(attachmentId)}`,
+      capture: `${tmux} capture-pane -p -J -t ${shellQuote(handle.paneId)}`,
+      kill: `${tmux} kill-session -t ${shellQuote(handle.session ?? handle.paneId)}`,
+    };
+  },
+  label(handle) {
+    return handle.session ?? handle.paneId;
+  },
+  async reap(pi) {
+    const sockets = new Set([tmuxSocketPath(), privateTmuxSocketPath()]);
+    const now = Date.now();
+    for (const socket of sockets) {
+      const listed = await pi.exec(
+        "tmux",
+        ["-S", socket, "list-panes", "-a", "-F", "#{session_name} #{pane_dead} #{session_created}"],
+        { timeout: 5_000 },
+      );
+      if (listed.code !== 0) continue;
+      for (const line of listed.stdout.split("\n")) {
+        const [session, dead, created] = line.trim().split(/\s+/);
+        if (!session || !/^pi-agent-[0-9a-f-]{36}$/i.test(session)) continue;
+        if (dead !== "1") continue;
+        const createdMs = Number(created) * 1000;
+        if (Number.isFinite(createdMs) && now - createdMs < REAP_SESSION_AGE_MS) continue;
+        await pi.exec("tmux", ["-S", socket, "kill-session", "-t", session], { timeout: 5_000 });
+      }
+    }
+  },
+};
+
+function herdrPaneId(stdout: string, key: "pane" | "root_pane"): string | undefined {
+  try {
+    const parsed = JSON.parse(stdout) as { result?: Record<string, { pane_id?: unknown }> };
+    const paneId = parsed.result?.[key]?.pane_id;
+    return typeof paneId === "string" && paneId ? paneId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const herdrBackend: Backend = {
+  kind: "herdr",
+  autoCloseOnSettle: true,
+  async ensureAvailable(pi) {
+    const version = await pi.exec("herdr", ["--version"], { timeout: 5_000 });
+    if (version.code !== 0) {
+      throw new Error(
+        `herdr is required for subagents in this session: ${version.stderr.trim() || "herdr not found"}`,
+      );
+    }
+  },
+  wrapLaunch(command) {
+    // No `exec`: when the child exits, the pane returns to its shell prompt, which
+    // keeps it readable and lets `pane process-info` report the exit.
+    return command;
+  },
+  initialHandle() {
+    return { paneId: "(pending)" };
+  },
+  async create(pi, { cwd, label, handle }) {
+    // A background tab (rather than splitting the caller's pane) keeps the user's
+    // own pi TUI full-size, mirroring tmux's detached-session behavior.
+    const created = await pi.exec(
+      "herdr",
+      ["tab", "create", "--cwd", cwd, "--no-focus", "--label", label],
+      { timeout: 15_000 },
+    );
+    if (created.code !== 0) {
+      throw new Error(
+        `Failed to create herdr tab: ${created.stderr.trim() || created.stdout.trim()}`,
+      );
+    }
+    const paneId = herdrPaneId(created.stdout, "root_pane");
+    if (!paneId) {
+      throw new Error(`herdr did not report a pane id: ${created.stdout.trim()}`);
+    }
+    handle.paneId = paneId;
+  },
+  async launch(pi, handle, command) {
+    handle.launchedAt = Date.now();
+    // `pane run` sends the command text and Enter atomically.
+    const run = await pi.exec("herdr", ["pane", "run", handle.paneId, command], {
+      timeout: 10_000,
+    });
+    if (run.code !== 0) {
+      throw new Error(run.stderr.trim() || run.stdout.trim() || "Failed to start child Pi.");
+    }
+  },
+  async hasExited(pi, handle) {
+    const info = await pi.exec("herdr", ["pane", "process-info", "--pane", handle.paneId], {
+      timeout: 5_000,
+    });
+    if (info.code !== 0) {
+      // Pane gone (user closed it): treat as exited so the loop falls back to result.json.
+      return /not_found/.test(info.stderr) || /not_found/.test(info.stdout);
+    }
+    let procInfo: { foreground_process_group_id?: number; shell_pid?: number } | undefined;
+    try {
+      procInfo = (JSON.parse(info.stdout) as { result?: { process_info?: typeof procInfo } }).result
+        ?.process_info;
+    } catch {
+      return false;
+    }
+    if (
+      !procInfo ||
+      typeof procInfo.foreground_process_group_id !== "number" ||
+      typeof procInfo.shell_pid !== "number"
+    ) {
+      return false;
+    }
+    const backToShell = procInfo.foreground_process_group_id === procInfo.shell_pid;
+    if (!backToShell) {
+      handle.sawRunning = true;
+      return false;
+    }
+    // At the shell prompt: the child exited if we observed it running, or enough
+    // time has passed that it must have started and finished.
+    const grace =
+      handle.launchedAt !== undefined && Date.now() - handle.launchedAt > HERDR_STARTUP_GRACE_MS;
+    return handle.sawRunning === true || grace;
+  },
+  async statusHint(pi, handle) {
+    if (handle.paneId === "(pending)") return undefined;
+    const info = await pi.exec("herdr", ["pane", "get", handle.paneId], { timeout: 5_000 });
+    if (info.code !== 0) return undefined;
+    try {
+      const status = (JSON.parse(info.stdout) as { result?: { pane?: { agent_status?: unknown } } })
+        .result?.pane?.agent_status;
+      return typeof status === "string" && status !== "unknown" ? status : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+  async close(pi, handle) {
+    if (handle.paneId && handle.paneId !== "(pending)") {
+      await pi.exec("herdr", ["pane", "close", handle.paneId], { timeout: 10_000 });
+    }
+  },
+  commands(handle) {
+    const pane = handle.paneId;
+    return {
+      attach: `herdr agent attach ${pane}`,
+      capture: `herdr pane read ${pane} --source visible`,
+      kill: `herdr pane close ${pane}`,
+    };
+  },
+  label(handle) {
+    return handle.paneId === "(pending)" ? "herdr pane" : `herdr ${handle.paneId}`;
+  },
+  async reap() {
+    // herdr panes are user-visible and lifecycle-managed; auto-close on settle
+    // handles our own panes, and we never sweep panes the user may still want.
+  },
+};
+
+/** Pick the multiplexer that hosts child panes based on the parent's environment. */
+function detectBackend(): Backend {
+  if (process.env.HERDR_ENV === "1" && process.env.HERDR_PANE_ID) return herdrBackend;
+  return tmuxBackend;
+}
+
+function applyCommands(spec: RunSpec, backend: Backend, handle: RunHandle): void {
+  const commands = backend.commands(handle, spec.attachmentId);
+  spec.attachCommand = commands.attach;
+  spec.captureCommand = commands.capture;
+  spec.killCommand = commands.kill;
+  spec.label = backend.label(handle);
+}
+
 export default function subagentExtension(pi: ExtensionAPI): void {
   pi.registerFlag(ATTACH_FLAG, {
     description: "Attach using the child session id printed by the subagent tool",
@@ -424,9 +912,18 @@ export default function subagentExtension(pi: ExtensionAPI): void {
     return;
   }
 
+  const backend = detectBackend();
+
+  void backend.reap(pi).catch(() => {
+    // Housekeeping only; never block startup on it.
+  });
+  void reapStaleRunDirs().catch(() => {
+    // Housekeeping only; never block startup on it.
+  });
+
   let queueTail: Promise<void> = Promise.resolve();
   let queueDepth = 0;
-  let activeSession: string | undefined;
+  let activeHandle: RunHandle | undefined;
 
   const withSerialExecution = async <T>(
     signal: AbortSignal | undefined,
@@ -453,9 +950,9 @@ export default function subagentExtension(pi: ExtensionAPI): void {
   };
 
   pi.on("session_shutdown", async () => {
-    if (!activeSession) return;
-    await pi.exec("tmux", tmuxArgs("kill-session", "-t", activeSession));
-    activeSession = undefined;
+    if (!activeHandle) return;
+    await backend.close(pi, activeHandle);
+    activeHandle = undefined;
   });
 
   pi.registerTool({
@@ -500,16 +997,14 @@ export default function subagentExtension(pi: ExtensionAPI): void {
         childSessionId,
       );
       const resultPath = path.join(runDir, "result.json");
-      const tmuxSession = tmuxSessionName(childSessionId);
-      // Resolved to the real pane id after new-session; base-index/pane-base-index
-      // are user settings, so window/pane indices cannot be assumed to be 0.
-      let tmuxTarget = tmuxSession;
+      const sessionName = tmuxSessionName(childSessionId);
+      const tabLabel = `pi-agent ${childSessionId.slice(0, 8)}`;
+      const handle = backend.initialHandle(sessionName);
       const spec: RunSpec = {
         task: params.task,
         cwd,
         attachmentId: childSessionId,
-        tmuxSession,
-        tmuxTarget,
+        label: backend.label(handle),
         attachCommand: "",
         captureCommand: "",
         killCommand: "",
@@ -518,7 +1013,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
         thinking,
         trusted: isSameOrDescendant(path.resolve(ctx.cwd), cwd) && ctx.isProjectTrusted(),
       };
-      updateTmuxCommands(spec);
+      applyCommands(spec, backend, handle);
 
       return withSerialExecution(
         signal,
@@ -539,6 +1034,14 @@ export default function subagentExtension(pi: ExtensionAPI): void {
             encoding: "utf8",
             mode: 0o600,
           });
+          await writeJsonAtomic(path.join(runDir, "meta.json"), {
+            version: 1,
+            backend: backend.kind,
+            socket: tmuxSocketPath(),
+            tmuxSession: sessionName,
+            cwd,
+            startedAt: Date.now(),
+          });
 
           const piArgs = [
             ...getPiInvocationParts(),
@@ -553,84 +1056,45 @@ export default function subagentExtension(pi: ExtensionAPI): void {
             "--session-id",
             childSessionId,
             "--name",
-            tmuxSession,
+            sessionName,
             spec.trusted ? "--approve" : "--no-approve",
             "--extension",
             EXTENSION_PATH,
             `@${promptPath}`,
           ];
-          const childCommand = [
-            "exec env",
-            `${CHILD_ENV}=1`,
-            `${RESULT_ENV}=${shellQuote(resultPath)}`,
-            piArgs.map(shellQuote).join(" "),
-          ].join(" ");
+          const childCommand = backend.wrapLaunch(
+            [
+              "env",
+              `${CHILD_ENV}=1`,
+              `${RESULT_ENV}=${shellQuote(resultPath)}`,
+              piArgs.map(shellQuote).join(" "),
+            ].join(" "),
+          );
 
-          const tmuxVersion = await pi.exec("tmux", ["-V"], { timeout: 5_000 });
-          if (tmuxVersion.code !== 0) {
-            throw new Error(
-              `tmux is required for subagents: ${tmuxVersion.stderr.trim() || "tmux not found"}`,
-            );
-          }
+          await backend.ensureAvailable(pi);
 
           const startedAt = Date.now();
-          const created = await pi.exec(
-            "tmux",
-            tmuxArgs(
-              "new-session",
-              "-d",
-              "-s",
-              tmuxSession,
-              "-n",
-              "pi",
-              "-c",
-              cwd,
-              "-P",
-              "-F",
-              "#{window_id} #{pane_id}",
-            ),
-          );
-          if (created.code !== 0) {
-            throw new Error(
-              `Failed to create tmux session: ${created.stderr.trim() || created.stdout.trim()}`,
-            );
-          }
-          activeSession = tmuxSession;
+          // Track before create so a mid-create failure is still torn down on shutdown.
+          activeHandle = handle;
+          await backend.create(pi, { cwd, label: tabLabel, handle });
+          applyCommands(spec, backend, handle);
 
-          const [windowId, paneId] = created.stdout.trim().split(/\s+/, 2);
-          if (!windowId || !paneId) {
-            throw new Error(
-              `tmux did not report the new window and pane: ${created.stdout.trim()}`,
-            );
-          }
-          tmuxTarget = paneId;
-          spec.tmuxTarget = paneId;
-          updateTmuxCommands(spec);
+          const settle = async (): Promise<void> => {
+            if (backend.autoCloseOnSettle) await backend.close(pi, handle);
+            if (activeHandle === handle) activeHandle = undefined;
+          };
 
           try {
-            const remain = await pi.exec(
-              "tmux",
-              tmuxArgs("set-window-option", "-t", windowId, "remain-on-exit", "on"),
-            );
-            if (remain.code !== 0)
-              throw new Error(remain.stderr.trim() || "Failed to set remain-on-exit.");
-
             const initialDetails = detailsFor(spec, "running", { startedAt });
             onUpdate?.({
               content: [{ type: "text", text: partialText(initialDetails) }],
               details: initialDetails,
             });
 
-            const sent = await pi.exec(
-              "tmux",
-              tmuxArgs("send-keys", "-t", tmuxTarget, "-l", "--", childCommand),
-            );
-            if (sent.code !== 0) throw new Error(sent.stderr.trim() || "Failed to start child Pi.");
-            const entered = await pi.exec("tmux", tmuxArgs("send-keys", "-t", tmuxTarget, "Enter"));
-            if (entered.code !== 0)
-              throw new Error(entered.stderr.trim() || "Failed to submit child command.");
+            await backend.launch(pi, handle, childCommand);
 
-            let lastPane = "";
+            let lastPreview = "";
+            let lastFrame = "";
             let childResult: ChildResult | undefined;
             while (!childResult) {
               if (signal?.aborted) throw new Error("Subagent aborted.");
@@ -641,34 +1105,30 @@ export default function subagentExtension(pi: ExtensionAPI): void {
                 // The result file is created atomically when the child settles.
               }
 
-              const paneResult = await pi.exec(
-                "tmux",
-                tmuxArgs("capture-pane", "-p", "-J", "-t", tmuxTarget),
-                {
-                  timeout: 5_000,
-                },
-              );
-              if (paneResult.code === 0) {
-                const pane = trimPane(paneResult.stdout);
-                if (pane && pane !== lastPane) {
-                  lastPane = pane;
-                  const details = detailsFor(spec, "running", { pane, startedAt });
-                  onUpdate?.({ content: [{ type: "text", text: partialText(details) }], details });
-                }
+              // Prefer the child's structured session log over scraping its TUI.
+              const preview = readSessionActivity(sessionDir) ?? "Working\u2026 (no output yet)";
+              const agentStatus = await backend.statusHint(pi, handle);
+              lastPreview = preview;
+              const frame = `${agentStatus ?? ""}\u0000${preview}`;
+              if (frame !== lastFrame) {
+                lastFrame = frame;
+                const details = detailsFor(spec, "running", {
+                  pane: preview,
+                  agentStatus,
+                  startedAt,
+                });
+                onUpdate?.({ content: [{ type: "text", text: partialText(details) }], details });
               }
 
-              const dead = await pi.exec(
-                "tmux",
-                tmuxArgs("display-message", "-p", "-t", tmuxTarget, "#{pane_dead}"),
-              );
-              if (dead.code === 0 && dead.stdout.trim() === "1") {
+              if (await backend.hasExited(pi, handle)) {
                 await abortableDelay(100, signal);
                 try {
                   childResult = JSON.parse(await readFile(resultPath, "utf8")) as ChildResult;
                   break;
                 } catch {
+                  await settle();
                   throw new Error(
-                    `Child Pi exited before reporting a result.\n\n${lastPane || "No pane output."}\n\nInspect: ${spec.captureCommand}`,
+                    `Child Pi exited before reporting a result.\n\n${lastPreview || "No output."}\n\nInspect: ${spec.captureCommand}`,
                   );
                 }
               }
@@ -676,15 +1136,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
               await abortableDelay(POLL_INTERVAL_MS, signal);
             }
 
-            const finalPaneResult = await pi.exec(
-              "tmux",
-              tmuxArgs("capture-pane", "-p", "-J", "-t", tmuxTarget),
-              {
-                timeout: 5_000,
-              },
-            );
-            const finalPane =
-              finalPaneResult.code === 0 ? trimPane(finalPaneResult.stdout) : lastPane;
+            const finalPreview = readSessionActivity(sessionDir) ?? lastPreview;
             const status: RunStatus = childResult.status === "completed" ? "completed" : "failed";
             let rawOutput = childResult.output.trim();
             if (childResult.status === "failed" && childResult.error?.trim()) {
@@ -692,7 +1144,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
             }
             const output = truncateToolText(rawOutput || "(no text output)");
             const details = detailsFor(spec, status, {
-              pane: finalPane,
+              pane: finalPreview,
               output,
               sessionFile: childResult.sessionFile,
               provider: childResult.provider ?? spec.provider,
@@ -702,6 +1154,7 @@ export default function subagentExtension(pi: ExtensionAPI): void {
               finishedAt: childResult.finishedAt,
             });
 
+            await settle();
             if (childResult.status === "failed") {
               throw new Error(resultText(details));
             }
@@ -711,12 +1164,12 @@ export default function subagentExtension(pi: ExtensionAPI): void {
             };
           } catch (error) {
             if (signal?.aborted) {
-              await pi.exec("tmux", tmuxArgs("kill-session", "-t", tmuxSession));
-              activeSession = undefined;
+              await backend.close(pi, handle);
+              activeHandle = undefined;
             }
             throw error;
           } finally {
-            if (activeSession === tmuxSession) activeSession = undefined;
+            if (activeHandle === handle) activeHandle = undefined;
           }
         },
       );
@@ -740,14 +1193,21 @@ export default function subagentExtension(pi: ExtensionAPI): void {
       }
 
       const running = isPartial || details.status === "queued" || details.status === "running";
-      const icon = running
-        ? theme.fg("warning", details.status === "queued" ? "◦" : "●")
-        : details.status === "completed"
-          ? theme.fg("success", "✓")
-          : theme.fg("error", "✗");
+      const blocked = running && details.agentStatus === "blocked";
+      const icon = blocked
+        ? theme.fg("error", "⚠")
+        : running
+          ? theme.fg("warning", details.status === "queued" ? "◦" : "●")
+          : details.status === "completed"
+            ? theme.fg("success", "✓")
+            : theme.fg("error", "✗");
       const duration = formatDuration(details.startedAt, details.finishedAt);
-      let text = `${icon} ${theme.fg("toolTitle", theme.bold(details.tmuxSession))}`;
-      text += theme.fg("muted", ` · ${details.status}${duration ? ` · ${duration}` : ""}`);
+      const statusExtra = running && details.agentStatus ? ` · ${details.agentStatus}` : "";
+      let text = `${icon} ${theme.fg("toolTitle", theme.bold(details.label))}`;
+      text += theme.fg(
+        "muted",
+        ` · ${details.status}${statusExtra}${duration ? ` · ${duration}` : ""}`,
+      );
       text += `\n  ${theme.fg("accent", details.attachCommand)}`;
       text += `\n  ${theme.fg("dim", `${details.provider}/${details.model} (${details.thinking})`)}`;
 
