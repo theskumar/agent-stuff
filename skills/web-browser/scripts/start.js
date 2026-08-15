@@ -14,32 +14,66 @@ if (!Number.isInteger(DEBUG_PORT) || DEBUG_PORT < 1 || DEBUG_PORT > 65535) {
   process.exit(1);
 }
 
-const args = new Set(process.argv.slice(2));
-const useProfile = args.has("--profile");
-const resetProfile = args.has("--reset-profile");
-const stealth = args.has("--stealth");
+const argv = process.argv.slice(2);
+const flags = new Set();
+let chromeProfile = "Default";
+let listProfiles = false;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === "--chrome-profile") {
+    chromeProfile = argv[++i];
+    if (!chromeProfile) {
+      console.error("✗ --chrome-profile needs a value (e.g. --chrome-profile 'Profile 1')");
+      process.exit(1);
+    }
+  } else if (a === "--list-profiles") {
+    listProfiles = true;
+  } else {
+    flags.add(a);
+  }
+}
+const useProfile = flags.has("--profile");
+const resetProfile = flags.has("--reset-profile");
+// Stealth is the default. Opt out with --no-stealth (alias --automation) to get
+// the old automation banner + navigator.webdriver=true behavior.
+const stealth = !(flags.has("--no-stealth") || flags.has("--automation"));
 
-const unknownArgs = [...args].filter(
-  (arg) => arg !== "--profile" && arg !== "--reset-profile" && arg !== "--stealth",
-);
-if (unknownArgs.length > 0) {
-  console.log("Usage: start.js [--profile] [--reset-profile] [--stealth]");
-  console.log("\nOptions:");
+function printUsage() {
   console.log(
-    "  --profile       Copy your default Chrome profile into an isolated cache",
+    "Usage: start.js [--profile] [--chrome-profile <name>] [--reset-profile] [--no-stealth] [--list-profiles]",
   );
-  console.log("  --reset-profile Clear the selected cached profile before launch");
-  console.log("  --stealth       Disable automation flags to avoid bot detection");
+  console.log("\nOptions:");
+  console.log("  --profile           Copy your Chrome profile (logins/cookies) into an isolated cache");
+  console.log("  --chrome-profile <n> Which source Chrome profile dir to copy (default: Default)");
+  console.log("  --list-profiles     List your Chrome profiles (dir → display name) and exit");
+  console.log("  --reset-profile     Clear the cached copy before launch (forces a fresh copy)");
+  console.log("  --no-stealth        Opt out of stealth (adds the automation banner; alias --automation)");
+  console.log("  --stealth           Accepted, no-op (stealth is the default)");
   console.log("\nExamples:");
   console.log("  start.js");
   console.log("  start.js --profile");
-  console.log("  start.js --profile --stealth");
-  console.log("  start.js --reset-profile");
+  console.log("  start.js --list-profiles");
+  console.log("  start.js --profile --chrome-profile 'Profile 1'");
+  console.log("  start.js --no-stealth");
+}
+
+const KNOWN_FLAGS = new Set([
+  "--profile",
+  "--reset-profile",
+  "--stealth",
+  "--no-stealth",
+  "--automation",
+]);
+const unknownArgs = [...flags].filter((a) => !KNOWN_FLAGS.has(a));
+if (unknownArgs.length > 0) {
+  console.error(`✗ Unknown option(s): ${unknownArgs.join(" ")}`);
+  printUsage();
   process.exit(1);
 }
 
 const HOME = process.env["HOME"] || homedir();
 const CACHE_ROOT = join(HOME, ".cache", "agent-web");
+const SOURCE_CHROME_DIR = join(HOME, "Library", "Application Support", "Google", "Chrome");
 const BROWSER_ROOT = join(CACHE_ROOT, "browser");
 const FRESH_PROFILE_DIR = join(BROWSER_ROOT, "fresh-profile");
 const PROFILE_COPY_DIR = join(BROWSER_ROOT, "profile-copy");
@@ -86,6 +120,30 @@ function clearState() {
   }
 }
 
+// Read source Chrome profiles from Local State (dir → human name).
+function listChromeProfiles() {
+  try {
+    const j = JSON.parse(readFileSync(join(SOURCE_CHROME_DIR, "Local State"), "utf8"));
+    const cache = j.profile?.info_cache || {};
+    return Object.entries(cache).map(([dir, info]) => ({ dir, name: info?.name || dir }));
+  } catch {
+    return [];
+  }
+}
+
+// Is the user's real Chrome running? (our isolated instance carries BROWSER_ROOT in argv)
+function isSourceChromeRunning() {
+  try {
+    const out = execSync(
+      `pgrep -fl "Google Chrome.app/Contents/MacOS/Google Chrome" 2>/dev/null || true`,
+      { encoding: "utf8" },
+    );
+    return out.split("\n").some((line) => line.trim() && !line.includes(BROWSER_ROOT));
+  } catch {
+    return false;
+  }
+}
+
 async function isDebugEndpointUp() {
   try {
     const response = await fetch(
@@ -113,6 +171,19 @@ function resolveChromeBinary() {
 
 ensureDir(BROWSER_ROOT);
 
+if (listProfiles) {
+  const profiles = listChromeProfiles();
+  if (!profiles.length) {
+    console.error(`✗ No Chrome profiles found at ${SOURCE_CHROME_DIR}`);
+    process.exit(1);
+  }
+  console.log("Available Chrome profiles (use --chrome-profile <dir>):");
+  for (const p of profiles) {
+    console.log(`  ${p.dir.padEnd(12)} →  ${p.name}`);
+  }
+  process.exit(0);
+}
+
 if (resetProfile) {
   rmSync(userDataDir, { recursive: true, force: true });
 }
@@ -132,7 +203,8 @@ if (await isDebugEndpointUp()) {
   ) {
     if (
       runningState.mode === mode &&
-      runningState.userDataDir === userDataDir
+      runningState.userDataDir === userDataDir &&
+      (!useProfile || runningState.chromeProfile === chromeProfile)
     ) {
       console.log(
         `✓ Chrome already running on :${DEBUG_PORT} (reusing ${mode} profile)`,
@@ -160,22 +232,70 @@ if (await isDebugEndpointUp()) {
 ensureDir(userDataDir);
 
 if (useProfile) {
-  const sourceProfileDir = join(
-    HOME,
-    "Library",
-    "Application Support",
-    "Google",
-    "Chrome",
-  );
-
-  if (!existsSync(sourceProfileDir)) {
+  if (!existsSync(SOURCE_CHROME_DIR)) {
     console.error("✗ Could not find your local Chrome profile directory");
-    console.error(`  Expected: ${sourceProfileDir}`);
+    console.error(`  Expected: ${SOURCE_CHROME_DIR}`);
     process.exit(1);
   }
 
+  const srcProfileDir = join(SOURCE_CHROME_DIR, chromeProfile);
+  if (!existsSync(srcProfileDir)) {
+    console.error(`✗ Chrome profile "${chromeProfile}" not found in ${SOURCE_CHROME_DIR}`);
+    const profiles = listChromeProfiles();
+    if (profiles.length) {
+      console.error("  Available profiles (pass --chrome-profile <dir>):");
+      for (const p of profiles) {
+        console.error(`    ${p.dir.padEnd(12)} →  ${p.name}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  if (isSourceChromeRunning()) {
+    console.error(
+      "⚠ Your Chrome is running — recently added logins may not be flushed to disk yet.",
+    );
+    console.error(
+      "  For the freshest session, quit Chrome then re-run. Copying current on-disk state anyway…",
+    );
+  }
+
+  const destDefault = join(userDataDir, "Default");
+  ensureDir(destDefault);
+
+  // Drop stale files left by older copies. rsync --delete PROTECTS excluded files
+  // from deletion, so a previously-copied Preferences/Secure Preferences/Local
+  // State would survive and keep firing the "Something went wrong" dialog.
+  // --delete-excluded (below) clears Default/; remove these explicitly too.
+  rmSync(join(userDataDir, "Local State"), { force: true });
+  rmSync(join(destDefault, "Preferences"), { force: true });
+  rmSync(join(destDefault, "Secure Preferences"), { force: true });
+
+  // Copy ONLY login/session-relevant paths, incrementally. Chrome ≥ M96 stores
+  // cookies under Network/Cookies, so the whole Network/ dir is included.
+  //
+  // Deliberately NOT copied: Preferences / Secure Preferences / Local State.
+  // Chrome HMAC-validates Preferences against a profile-path-bound seed; copying
+  // it into a different profile path triggers the "Something went wrong when
+  // opening your profile" dialog. Logins do not need it. On macOS cookies decrypt
+  // via the Keychain "Chrome Safe Storage" key, so Local State is unnecessary too.
+  const includeRules = [
+    "Cookies",
+    "Cookies-journal",
+    "Login Data",
+    "Login Data-journal",
+    "Web Data",
+    "Web Data-journal",
+    "Network/***",
+    "Local Storage/***",
+    "Session Storage/***",
+    "IndexedDB/***",
+  ]
+    .map((p) => `--include='${p}'`)
+    .join(" ");
+
   execSync(
-    `rsync -a --delete --exclude 'Singleton*' --exclude 'DevToolsActivePort*' "${sourceProfileDir}/" "${userDataDir}/"`,
+    `rsync -a --delete --delete-excluded ${includeRules} --exclude='*' "${srcProfileDir}/" "${destDefault}/"`,
     { stdio: "pipe" },
   );
 }
@@ -216,12 +336,10 @@ if (!stealth) {
   chromeArgs.push("--enable-automation");
 }
 
-if (stealth) {
-  chromeArgs.push(
-    "--disable-blink-features=AutomationControlled",
-    "--disable-infobars",
-  );
-}
+// Stealth: simply omit --enable-automation. That alone keeps navigator.webdriver
+// false, and stealth.js re-asserts it via a CDP patch on every navigation.
+// We deliberately do NOT add --disable-blink-features=AutomationControlled: it is
+// redundant here and triggers Chrome's "unsupported command-line flag" warning bar.
 
 const chromeProc = spawn(chromeBinary, chromeArgs, {
   detached: true,
@@ -248,6 +366,7 @@ writeState({
   pid: chromeProc.pid,
   mode,
   stealth,
+  chromeProfile: useProfile ? chromeProfile : null,
   userDataDir,
   port: DEBUG_PORT,
   startedAt: new Date().toISOString(),
@@ -260,6 +379,7 @@ spawn(process.execPath, [watcherPath], { detached: true, stdio: "ignore" }).unre
 console.log(
   `✓ Chrome started on :${DEBUG_PORT} with ${useProfile ? "profile-copy" : "fresh"} profile`,
 );
-if (!useProfile) {
-  console.log(`  profile dir: ${userDataDir}`);
+if (useProfile) {
+  console.log(`  copied from Chrome profile: ${chromeProfile}`);
 }
+console.log(`  profile dir: ${userDataDir}`);
