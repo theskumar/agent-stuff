@@ -83,7 +83,7 @@ Claude Code output styles. Source: [`output-styles/`](output-styles/), symlinked
 | Style | Description |
 |---|---|
 | [`simple-english.md`](output-styles/simple-english.md) | ASD-STE100 Simplified Technical English (source: [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish)) |
-| [`caveman.md`](output-styles/caveman.md) | Terse "smart caveman" prose; substance stays, fluff dies (recovered from corrupted `~/.claude/CLAUDE.md`) |
+| [`caveman.md`](output-styles/caveman.md) | Terse "smart caveman" prose; substance stays, fluff dies (source: [carlosduplar/caveman-output-style-claude-code](https://github.com/carlosduplar/caveman-output-style-claude-code)) |
 
 ## Skills
 
