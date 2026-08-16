@@ -71,6 +71,14 @@ for name in "${PI_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.pi/agent/skills/$name"
 done
 
+echo "==> Output styles → ~/.claude/output-styles/ (Claude Code)"
+for style in "$REPO_DIR"/output-styles/*.md; do
+  name="$(basename "$style")"
+  # SOURCES.md is documentation, not a selectable output style.
+  [ "$name" = "SOURCES.md" ] && continue
+  link "$style" "$HOME/.claude/output-styles/$name"
+done
+
 echo "==> Claude commands"
 # security/audit → reuse prompts/security-audit.md
 link "$REPO_DIR/prompts/security-audit.md" "$HOME/.claude/commands/security/audit.md"

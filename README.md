@@ -76,6 +76,15 @@ Source: [`intercepted-commands/`](intercepted-commands/).
 | [`poetry`](intercepted-commands/poetry) | `uv init` / `uv add` / `uv sync` / `uv run` |
 | [`python`](intercepted-commands/python), [`python3`](intercepted-commands/python3) | `uv run --python` |
 
+## Output styles
+
+Claude Code output styles. Source: [`output-styles/`](output-styles/), symlinked to `~/.claude/output-styles/`. Select with `/output-style <name>` or set `"outputStyle": "<name>"` in `~/.claude/settings.json`. See [`output-styles/SOURCES.md`](output-styles/SOURCES.md) for sources and acknowledgements.
+
+| Style | Description |
+|---|---|
+| [`simple-english.md`](output-styles/simple-english.md) | ASD-STE100 Simplified Technical English (source: [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish)) |
+| [`caveman.md`](output-styles/caveman.md) | Terse "smart caveman" prose; substance stays, fluff dies (recovered from corrupted `~/.claude/CLAUDE.md`) |
+
 ## Skills
 
 Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skills/).
@@ -128,6 +137,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`extensions/*.ts`](extensions/) | `~/.pi/agent/extensions/*.ts` |
 | [`prompts/*.md`](prompts/) | `~/.pi/agent/prompts/*.md` |
 | [`prompts/security-audit.md`](prompts/security-audit.md) | `~/.claude/commands/security/audit.md` |
+| [`output-styles/*.md`](output-styles/) (except `SOURCES.md`) | `~/.claude/output-styles/*.md` |
 | Selected skills (CC_SKILLS) | `~/.claude/skills/*` |
 | Selected skills (PI_SKILLS) | `~/.pi/agent/skills/*` |
 
