@@ -5,29 +5,30 @@
  *   Two small things around pi's built-in session name (`/name`):
  *     1. `Ctrl+Shift+N` opens a prefilled, single-line rename dialog, so the
  *        name can be set or amended mid-session without retyping it.
- *     2. Mirrors the session name into the tmux window name, so the status
- *        bar says what the pane is actually working on.
+ *     2. Mirrors the session name into the tmux window name or herdr tab
+ *        label, so the status bar says what the pane is actually working on.
  *
- *   The tmux mirror listens on `session_info_changed`, so renames from any
- *   source sync: `/name`, this extension's shortcut, and the session
- *   selector's `Ctrl+R`.
+ *   The mirror listens on `session_info_changed`, so renames from any source
+ *   sync: `/name`, this extension's shortcut, and the session selector's
+ *   `Ctrl+R`. The backend is detected automatically: herdr when pi runs
+ *   inside a herdr session, otherwise tmux.
  *
  * Behavior:
- *   - No name → the window is left alone. A fresh unnamed session never
- *     claims a window you named by hand before launching pi.
- *   - Name set → `tmux rename-window` (which also disables that window's
- *     `automatic-rename`, so the label sticks).
- *   - Name cleared (submit an empty dialog) → `automatic-rename` back on, so
- *     tmux resumes deriving the name itself.
- *   - Quit → the pre-pi window name and `automatic-rename` state are
- *     restored. Session replacement (`new`/`resume`/`fork`/`reload`) skips
- *     the restore, since a `session_start` resync follows immediately.
- *   - Outside tmux, the whole thing is inert.
+ *   - No name → the window/tab is left alone. A fresh unnamed session never
+ *     claims a window/tab you named by hand before launching pi.
+ *   - Name set → `tmux rename-window` / `herdr tab rename` (tmux also
+ *     disables that window's `automatic-rename`, so the label sticks).
+ *   - Name cleared (submit an empty dialog) → tmux: `automatic-rename` back
+ *     on; herdr: prior label restored.
+ *   - Quit → the pre-pi window/tab name and (tmux) `automatic-rename` state
+ *     are restored. Session replacement (`new`/`resume`/`fork`/`reload`)
+ *     skips the restore, since a `session_start` resync follows immediately.
+ *   - Outside tmux and herdr, the whole thing is inert.
  *
  * Common usage patterns:
  *   - `Ctrl+Shift+N` — set, amend, or clear the session name.
- *   - `Ctrl+Shift+N`, Enter — re-sync tmux without touching the session.
- *   - `/name` — unchanged built-in; also syncs to tmux.
+ *   - `Ctrl+Shift+N`, Enter — re-sync without touching the session.
+ *   - `/name` — unchanged built-in; also syncs to tmux/herdr.
  */
 
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
@@ -40,20 +41,11 @@ import { Container, Input, Spacer, Text, getKeybindings } from "@earendil-works/
 const MAX_WINDOW_NAME = 20;
 
 // =============================================================================
-// tmux
+// Name-sync backend interface
 // =============================================================================
 
-type WindowState = {
-  name: string;
-  automaticRename: boolean;
-};
-
-/** Window state captured before the first rename, restored on quit. */
-let priorWindowState: WindowState | null = null;
-
-function tmuxPane(): string | undefined {
-  if (!process.env.TMUX) return undefined;
-  return process.env.TMUX_PANE || undefined;
+function execError(result: { stderr?: string; stdout?: string }): string {
+  return result.stderr?.trim() || result.stdout?.trim() || "unknown backend error";
 }
 
 /** `#` is a format escape in tmux status strings; drop it rather than render garbage. */
@@ -63,12 +55,36 @@ function formatWindowName(name: string): string {
   return `${clean.slice(0, MAX_WINDOW_NAME - 1)}…`;
 }
 
-function execError(result: { stderr?: string; stdout?: string }): string {
-  return result.stderr?.trim() || result.stdout?.trim() || "unknown tmux error";
+/** Common contract for syncing the session name to a multiplexer label. */
+interface NameSyncBackend {
+  /** Return true if this backend is active in the current environment. */
+  available(): boolean;
+  /** Set the window/tab label to `name`. */
+  setName(pi: ExtensionAPI, name: string): Promise<{ ok: boolean; error?: string }>;
+  /** Clear the label (restore automatic naming or prior label). */
+  clearName(pi: ExtensionAPI): Promise<{ ok: boolean; error?: string }>;
+  /** Restore the pre-pi label state on quit. */
+  restore(pi: ExtensionAPI): Promise<void>;
 }
 
-async function capturePriorWindowState(pi: ExtensionAPI, pane: string): Promise<void> {
-  if (priorWindowState) return;
+// =============================================================================
+// tmux backend
+// =============================================================================
+
+type TmuxWindowState = {
+  name: string;
+  automaticRename: boolean;
+};
+
+let tmuxPriorState: TmuxWindowState | null = null;
+
+function tmuxPane(): string | undefined {
+  if (!process.env.TMUX) return undefined;
+  return process.env.TMUX_PANE || undefined;
+}
+
+async function captureTmuxState(pi: ExtensionAPI, pane: string): Promise<void> {
+  if (tmuxPriorState) return;
   const result = await pi.exec("tmux", [
     "display-message",
     "-p",
@@ -79,11 +95,114 @@ async function capturePriorWindowState(pi: ExtensionAPI, pane: string): Promise<
   if (result.code !== 0) return;
   const [name, automatic] = result.stdout.trim().split("|");
   if (name === undefined) return;
-  priorWindowState = { name, automaticRename: automatic === "1" };
+  tmuxPriorState = { name, automaticRename: automatic === "1" };
+}
+
+const tmuxBackend: NameSyncBackend = {
+  available() {
+    return !!tmuxPane();
+  },
+  async setName(pi, name) {
+    const pane = tmuxPane();
+    if (!pane) return { ok: false, error: "No tmux pane" };
+    await captureTmuxState(pi, pane);
+    const result = await pi.exec("tmux", ["rename-window", "-t", pane, formatWindowName(name)]);
+    if (result.code !== 0)
+      return { ok: false, error: `Failed to rename tmux window: ${execError(result)}` };
+    return { ok: true };
+  },
+  async clearName(pi) {
+    const pane = tmuxPane();
+    if (!pane) return { ok: false, error: "No tmux pane" };
+    const result = await pi.exec("tmux", ["setw", "-t", pane, "automatic-rename", "on"]);
+    if (result.code !== 0)
+      return { ok: false, error: `Failed to release tmux window name: ${execError(result)}` };
+    return { ok: true };
+  },
+  async restore(pi) {
+    const pane = tmuxPane();
+    const prior = tmuxPriorState;
+    if (!pane || !prior) return;
+    tmuxPriorState = null;
+    if (prior.automaticRename) {
+      await pi.exec("tmux", ["setw", "-t", pane, "automatic-rename", "on"]);
+      return;
+    }
+    await pi.exec("tmux", ["rename-window", "-t", pane, prior.name]);
+  },
+};
+
+// =============================================================================
+// herdr backend
+// =============================================================================
+
+let herdrPriorLabel: string | null = null;
+
+function herdrTabId(): string | undefined {
+  if (process.env.HERDR_ENV !== "1") return undefined;
+  return process.env.HERDR_TAB_ID || undefined;
+}
+
+async function captureHerdrLabel(pi: ExtensionAPI, tabId: string): Promise<void> {
+  if (herdrPriorLabel !== null) return;
+  const result = await pi.exec("herdr", ["tab", "get", tabId], { timeout: 10_000 });
+  if (result.code !== 0) return;
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      result?: { tab?: { label?: string } };
+    };
+    herdrPriorLabel = parsed.result?.tab?.label ?? "";
+  } catch {
+    // JSON parse failed; leave prior as null so we do not attempt a restore.
+  }
+}
+
+const herdrBackend: NameSyncBackend = {
+  available() {
+    return !!herdrTabId();
+  },
+  async setName(pi, name) {
+    const tabId = herdrTabId();
+    if (!tabId) return { ok: false, error: "No herdr tab" };
+    await captureHerdrLabel(pi, tabId);
+    const label = name.replace(/\s+/g, " ").trim().slice(0, MAX_WINDOW_NAME);
+    const result = await pi.exec("herdr", ["tab", "rename", tabId, label], { timeout: 10_000 });
+    if (result.code !== 0)
+      return { ok: false, error: `Failed to rename herdr tab: ${execError(result)}` };
+    return { ok: true };
+  },
+  async clearName(pi) {
+    const tabId = herdrTabId();
+    if (!tabId) return { ok: false, error: "No herdr tab" };
+    // Restore the prior label so the tab does not keep a stale name.
+    const label = herdrPriorLabel ?? "";
+    const result = await pi.exec("herdr", ["tab", "rename", tabId, label], { timeout: 10_000 });
+    if (result.code !== 0)
+      return { ok: false, error: `Failed to restore herdr tab label: ${execError(result)}` };
+    return { ok: true };
+  },
+  async restore(pi) {
+    const tabId = herdrTabId();
+    const prior = herdrPriorLabel;
+    if (!tabId || prior === null) return;
+    herdrPriorLabel = null;
+    await pi.exec("herdr", ["tab", "rename", tabId, prior], { timeout: 10_000 });
+  },
+};
+
+// =============================================================================
+// Backend detection and unified sync
+// =============================================================================
+
+/** Pick herdr when inside a herdr session, otherwise tmux. */
+function detectBackend(): NameSyncBackend | undefined {
+  if (herdrBackend.available()) return herdrBackend;
+  if (tmuxBackend.available()) return tmuxBackend;
+  return undefined;
 }
 
 /**
- * Push `name` (or, when undefined, "no name") to the tmux window.
+ * Push `name` (or, when undefined, "no name") to the active backend.
  * Errors are reported only for user-initiated renames; background syncs stay quiet.
  */
 async function syncWindowName(
@@ -92,37 +211,21 @@ async function syncWindowName(
   name: string | undefined,
   opts: { notifyOnError: boolean },
 ): Promise<void> {
-  const pane = tmuxPane();
-  if (!pane) return;
+  const backend = detectBackend();
+  if (!backend) return;
 
-  const windowName = name ? formatWindowName(name) : "";
-  if (!windowName) {
-    // Cleared: hand naming back to tmux rather than leave a stale label.
-    const result = await pi.exec("tmux", ["setw", "-t", pane, "automatic-rename", "on"]);
-    if (result.code !== 0 && opts.notifyOnError && ctx.hasUI) {
-      ctx.ui.notify(`Failed to release tmux window name: ${execError(result)}`, "error");
-    }
-    return;
-  }
+  const windowName = name ? name.trim() : "";
+  const result = windowName ? await backend.setName(pi, windowName) : await backend.clearName(pi);
 
-  await capturePriorWindowState(pi, pane);
-  const result = await pi.exec("tmux", ["rename-window", "-t", pane, windowName]);
-  if (result.code !== 0 && opts.notifyOnError && ctx.hasUI) {
-    ctx.ui.notify(`Failed to rename tmux window: ${execError(result)}`, "error");
+  if (!result.ok && result.error && opts.notifyOnError && ctx.hasUI) {
+    ctx.ui.notify(result.error, "error");
   }
 }
 
 async function restoreWindowName(pi: ExtensionAPI): Promise<void> {
-  const pane = tmuxPane();
-  const prior = priorWindowState;
-  if (!pane || !prior) return;
-  priorWindowState = null;
-
-  if (prior.automaticRename) {
-    await pi.exec("tmux", ["setw", "-t", pane, "automatic-rename", "on"]);
-    return;
-  }
-  await pi.exec("tmux", ["rename-window", "-t", pane, prior.name]);
+  const backend = detectBackend();
+  if (!backend) return;
+  await backend.restore(pi);
 }
 
 // =============================================================================
