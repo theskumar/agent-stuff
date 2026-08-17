@@ -37,6 +37,7 @@ node scripts/linear.cjs find "project setup"             # full-text search
 node scripts/linear.cjs create --team CSL --title "..."  # create issue
 node scripts/linear.cjs update CSL-24 --state "In Progress"  # update issue
 node scripts/linear.cjs comment CSL-24 "comment body"    # add comment
+printf '%s' "$body" | node scripts/linear.cjs comment CSL-24  # multi-line body via stdin
 node scripts/linear.cjs query '{ viewer { id name } }'   # raw GraphQL
 ```
 
@@ -51,7 +52,7 @@ node scripts/linear.cjs query '{ viewer { id name } }'   # raw GraphQL
 | `find <term>` | Full-text search across all issues |
 | `create` | Create issue. Flags: `--team` (required), `--title` (required), `--description`, `--priority` (0-4), `--parent CSL-24` |
 | `update <KEY>` | Update issue. Flags: `--title`, `--description`, `--state`, `--priority` |
-| `comment <KEY> <body>` | Add comment. Body from arg, `--body`, or stdin |
+| `comment <KEY> [body]` | Add comment. Body from arg, `--body`, or stdin. Pass `-` or omit the body arg to read stdin (use for multi-line bodies) |
 | `query <graphql>` | Raw GraphQL query. `--vars '{}'` for variables |
 
 ### Priority values

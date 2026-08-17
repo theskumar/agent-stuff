@@ -352,7 +352,7 @@ Commands:
   find <term>                 Full-text search issues
   create --team KEY --title T Create issue (--description, --priority, --parent)
   update <KEY> [--flags]      Update issue (--title, --description, --state, --priority)
-  comment <KEY> <body>        Add comment (body from arg or stdin)
+  comment <KEY> [body]        Add comment (body from arg, --body, or stdin; pass - or omit to read stdin)
   query <graphql> [--vars {}] Raw GraphQL query`);
     return;
   }
@@ -396,7 +396,8 @@ Commands:
         priority: flags.priority ? parseInt(flags.priority) : undefined,
       });
     case "comment": {
-      const body = positional[1] || flags.body || (await readStdin());
+      const bodyArg = positional[1] === "-" ? null : positional[1];
+      const body = bodyArg || flags.body || (await readStdin());
       return addComment(positional[0], body);
     }
     case "query":
