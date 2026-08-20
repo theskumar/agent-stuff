@@ -37,8 +37,8 @@
  * Add a `fast` mode via `/mode` (Configure modes…) or directly in modes.json:
  *
  *   "fast": {
- *     "provider": "amazon-bedrock",
- *     "modelId": "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+ *     "provider": "claude-bridge",
+ *     "modelId": "claude-haiku-4-5"
  *   }
  *
  * We reuse pi's exported `generateBranchSummary`, so the prompt, structured
@@ -67,8 +67,8 @@ const EXTRA_TREE_GUIDELINES = [
 // Used only when modes.json has no usable `fast` mode (missing file, missing
 // mode, or missing provider/modelId).
 const FALLBACK_FAST_MODEL = {
-  provider: "amazon-bedrock",
-  modelId: "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  provider: "claude-bridge",
+  modelId: "claude-haiku-4-5",
 };
 
 type FastModelSpec = { provider: string; modelId: string };
