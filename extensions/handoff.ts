@@ -31,9 +31,19 @@
  *                            anthropic/claude-sonnet-5; falls back to the
  *                            current model if not found).
  *   - PI_HANDOFF_MAX_TOKENS  ceiling on the serialized conversation sent to
- *                            the distiller (default 60000). Oldest middle
+ *                            the distiller. When unset, the default (60000) is
+ *                            scaled by the continuation task inferred from the
+ *                            goal: exploration reads more, debugging less. When
+ *                            set, it overrides the task scaling. Oldest middle
  *                            turns are dropped first; head and recent tail are
  *                            never dropped.
+ *
+ * Task-relative handover:
+ *   The distiller (the "writer") already knows the task via the goal, so both
+ *   the record's size (input budget) and its shape (extraction schema) adapt
+ *   to it: a debug goal keeps recent hot state + verbatim errors; an explore
+ *   goal keeps the scattered findings map so the fresh agent does not
+ *   re-survey. Grounded in arxiv 2608.14528 (predictive sufficiency).
  *
  * Not this extension's job (use the right tool):
  *   - Parking / resuming later, or picking the next distinct task → todos.
@@ -57,19 +67,71 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader, convertToLlm } from "@earendil-works/pi-coding-agent";
 
-const SYSTEM_PROMPT = `You produce a continuation prompt so a fresh agent resumes the SAME in-progress task with no memory of the prior session. Optimize for resuming work, not for a readable report. Output the prompt only, no preamble like "Here's the prompt".
+const SYSTEM_PROMPT_BASE = `You produce a continuation prompt so a fresh agent resumes the SAME in-progress task with no memory of the prior session. Optimize for resuming work, not for a readable report. Output the prompt only, no preamble like "Here's the prompt".`;
 
-Extract, in this priority:
+const SYSTEM_PROMPT_RULES = `Rules:
+- Redact secrets (API keys, tokens, passwords, PII).
+- Reference existing artifacts (specs, ADRs, diffs, commits) by path/URL; do not restate their contents.
+- Omit sections that genuinely don't apply. Never pad.`;
+
+// --- Task-relative handover ---------------------------------------------
+// The writer already knows the task (the /handoff goal). The record's size
+// and shape should depend on it: a bug fix needs recent hot state and exact
+// errors; an exploration needs the scattered findings map so the fresh agent
+// does not re-survey. See arxiv 2608.14528 (predictive sufficiency: what a
+// handover must retain depends on the continuation task).
+
+type TaskKind = "debug" | "explore" | "default";
+
+interface TaskProfile {
+  kind: TaskKind;
+  /** Multiplier on the writer's input budget (how much old context it reads). */
+  budgetScale: number;
+  /** Task-specific extraction schema appended to the base system prompt. */
+  schema: string;
+}
+
+const DEBUG_SCHEMA = `Extract, in this priority (debugging continuation):
+1. NEXT ACTION — the exact edit/command in flight. Be specific: file, line, what change. If mid-edit, state the intended change verbatim.
+2. ERRORS VERBATIM — failing tests / stack traces / error lines copied exactly, not paraphrased.
+3. HYPOTHESIS & RULED OUT — current theory plus approaches already tried and rejected, so the fresh agent does not re-explore dead ends.
+4. LOCKED DECISIONS — settled choices the fresh agent must not relitigate.
+5. FILES IN PLAY — path + why each matters.`;
+
+const EXPLORE_SCHEMA = `Extract, in this priority (exploration/research/design continuation):
+1. GOAL & OPEN QUESTION — what is still being decided and the current leading direction.
+2. FINDINGS MAP — every load-bearing discovery so far, each with where it came from (file/URL/tool). These are scattered across the session; do not drop old ones just because they are early.
+3. SURVEYED & RULED OUT — options/paths already examined and rejected, so the fresh agent does not re-survey them.
+4. LOCKED DECISIONS — settled choices the fresh agent must not relitigate.
+5. NEXT ACTION — the concrete next step, if one is chosen.
+6. FILES / SOURCES IN PLAY — path or URL + why each matters.`;
+
+const DEFAULT_SCHEMA = `Extract, in this priority:
 1. NEXT ACTION — the exact edit/command in flight. Be specific: file, line, what change. If mid-edit, state the intended change verbatim.
 2. HYPOTHESIS & RULED OUT — current theory plus approaches already tried and rejected, so the fresh agent does not re-explore dead ends.
 3. ERRORS VERBATIM — failing tests / stack traces / error lines copied exactly, not paraphrased.
 4. LOCKED DECISIONS — settled choices the fresh agent must not relitigate.
-5. FILES IN PLAY — path + why each matters.
+5. FILES IN PLAY — path + why each matters.`;
 
-Rules:
-- Redact secrets (API keys, tokens, passwords, PII).
-- Reference existing artifacts (specs, ADRs, diffs, commits) by path/URL; do not restate their contents.
-- Omit sections that genuinely don't apply. Never pad.`;
+const DEBUG_RE =
+  /\b(bug|fix|debug|failing|crash|error|regression|broken|repro|stack ?trace|traceback|test(s)? fail)\b/i;
+const EXPLORE_RE =
+  /\b(explore|research|investigate|design|compare|evaluate|options?|survey|understand|figure out|spike|prototype|architect)\b/i;
+
+/** Classify the continuation task from the goal to set record size + shape. */
+function taskProfile(goal: string): TaskProfile {
+  if (EXPLORE_RE.test(goal)) {
+    return { kind: "explore", budgetScale: 1.75, schema: EXPLORE_SCHEMA };
+  }
+  if (DEBUG_RE.test(goal)) {
+    return { kind: "debug", budgetScale: 0.6, schema: DEBUG_SCHEMA };
+  }
+  return { kind: "default", budgetScale: 1, schema: DEFAULT_SCHEMA };
+}
+
+function systemPromptFor(profile: TaskProfile): string {
+  return `${SYSTEM_PROMPT_BASE}\n\n${profile.schema}\n\n${SYSTEM_PROMPT_RULES}`;
+}
 
 // --- Trimming knobs ------------------------------------------------------
 
@@ -90,9 +152,15 @@ const ERROR_TAIL = 1000;
 /** Tool-call argument JSON cap outside the verbatim tail. */
 const ARGS_MAX = 500;
 
-function maxTokensFromEnv(): number {
+/**
+ * Writer input budget. An explicit PI_HANDOFF_MAX_TOKENS always wins; otherwise
+ * the base default is scaled by the continuation task (bigger for exploration,
+ * smaller for debugging) so the record's size tracks the task.
+ */
+function maxTokensFor(budgetScale: number): number {
   const v = Number(process.env.PI_HANDOFF_MAX_TOKENS);
-  return Number.isFinite(v) && v > 0 ? v : DEFAULT_MAX_TOKENS;
+  if (Number.isFinite(v) && v > 0) return v;
+  return Math.round(DEFAULT_MAX_TOKENS * budgetScale);
 }
 
 function parseModelSpec(v: string | undefined): { provider: string; modelId: string } | null {
@@ -269,10 +337,12 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      const profile = taskProfile(goal);
+      const systemPrompt = systemPromptFor(profile);
       const llmMessages = convertToLlm(agentMessages);
       const { text: conversationText, approxTokens } = buildConversationText(
         llmMessages,
-        maxTokensFromEnv(),
+        maxTokensFor(profile.budgetScale),
       );
       const currentSessionFile = ctx.sessionManager.getSessionFile();
 
@@ -280,7 +350,7 @@ export default function (pi: ExtensionAPI) {
         const loader = new BorderedLoader(
           tui,
           theme,
-          `Distilling handoff on ${selection.model.id} (~${approxTokens.toLocaleString()} tok)…`,
+          `Distilling handoff on ${selection.model.id} · ${profile.kind} (~${approxTokens.toLocaleString()} tok)…`,
         );
         loader.onAbort = () => done(null);
 
@@ -302,7 +372,7 @@ export default function (pi: ExtensionAPI) {
           // "No API provider registered for api: <provider>".
           const response = await ctx.modelRegistry.complete(
             selection.model,
-            { systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
+            { systemPrompt, messages: [userMessage] },
             { apiKey: selection.apiKey, headers: selection.headers, signal: loader.signal },
           );
 
