@@ -16,6 +16,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 
 | Extension | Purpose |
 |---|---|
+| [`subscription-limits/`](extensions/subscription-limits/) | Claude and Codex quota badges on the footer path row; `/limits` shows account matching, all buckets, resets, and paid usage |
 | [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
 | [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
 | [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history, low-battery indicator (`.pi/battery.json` / `PI_BATTERY_THRESHOLD` / `PI_BATTERY_DISABLE`) |
@@ -25,6 +26,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`notify.ts`](extensions/notify.ts) | Desktop notification on turn end, titled with the tmux target; clicking jumps back to the firing `session:window.pane` when `terminal-notifier` is installed, else plain OSC 777 |
 | [`moshi-notify.ts`](extensions/moshi-notify.ts) | Push notification to [Moshi](https://getmoshi.app) iOS app on turn end via webhook, only when away from the desk — idle or screen locked (`MOSHI_API_TOKEN`, optional `MOSHI_UNIFIED=true`, `MOSHI_IDLE_SECONDS=300`, `MOSHI_NOTIFY=always\|never`) |
 | [`snake.ts`](extensions/snake.ts) | `/snake` game |
+| [`soul.ts`](extensions/soul.ts) | Durable agent identity (inspired by Nous Research's Hermes Agent): injects `~/.pi/agent/SOUL.md` (or a trusted project `.pi/SOUL.md`, which replaces it) at the top of the system prompt, ahead of pi's own identity. `/personality [name]` applies a session overlay on top of SOUL — 14 built-ins ship embedded, `~/.pi/agent/personalities/*.md` (and trusted project `.pi/personalities/*.md`) add/override by filename, selection persists in `soul-state.json`. `/soul [reload\|path]` inspects the active file. Auto-seeds SOUL.md + the built-in personality files on first run (never clobbers), reads once per session for prompt-cache stability, and skips subagent children (`PI_TMUX_SUBAGENT_CHILD`). Does not reach claude-bridge models (they use the `claude_code` preset) |
 | [`uv.ts`](extensions/uv.ts) | Force Python tooling through `uv` |
 | [`files.ts`](extensions/files.ts) | File tool tweaks |
 | [`goal.ts`](extensions/goal.ts) | `/goal` long-running thread goal with token budget tracking |
@@ -38,6 +40,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [-d] [prompt]` forks the current session into a new pi process in a new tmux window or herdr tab (backend auto-detected; `-d` keeps focus here) (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux/herdr) |
 | [`handoff.ts`](extensions/handoff.ts) | `/handoff <goal>` distills the session into a compact hot-state-first prompt and starts a fresh session seeded with it (`PI_HANDOFF_MODEL`, `PI_HANDOFF_MAX_TOKENS`; adapted from [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions), tuned for mid-task continuation) |
 | [`subagent.ts`](extensions/subagent.ts) | `subagent` tool: runs one delegated task at a time in an attachable `pi` child; auto-detects whether the parent runs under **herdr** (`HERDR_ENV`) or **tmux** and routes child panes through a shared backend. Under herdr the child runs in a non-disruptive background tab (`herdr agent attach <pane>` to view), exit is detected via `pane process-info`, and the pane auto-closes on settle. The live preview is built from the child's own session JSONL (latest reasoning/answer, current tool call, last result, tool-call count) instead of scraping the TUI, and herdr's native `agent_status` (working/blocked/done) shows in the header. tmux path unchanged: `pi --attach-subagent <id>` takes over the live session (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff); patched for a tmux-native setup — resolves real window/pane ids instead of assuming `:0.0`, puts children on the parent's own tmux server so attaching is a `switch-client` rather than a nested tmux, records each run's socket in `meta.json`, and reaps finished child sessions older than 2h) |
+| [`view-image.ts`](extensions/view-image.ts) | `view_image` tool reads an image file and returns it as an image attachment for visual inspection; reuses the built-in read tool's result renderer so pi's inline image viewer handles display (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 
 ## Agents
 
@@ -82,7 +85,6 @@ Claude Code output styles. Source: [`output-styles/`](output-styles/), symlinked
 
 | Style | Description |
 |---|---|
-| [`simple-english.md`](output-styles/simple-english.md) | ASD-STE100 Simplified Technical English (source: [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish)) |
 | [`caveman.md`](output-styles/caveman.md) | Terse "smart caveman" prose; substance stays, fluff dies (source: [carlosduplar/caveman-output-style-claude-code](https://github.com/carlosduplar/caveman-output-style-claude-code)) |
 
 ## Skills
@@ -108,6 +110,9 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |
 | [`web-browser`](skills/web-browser/) | Interactive browser automation via Chrome DevTools Protocol |
+| [`unslop`](skills/unslop/) | Cut AI tells from prose and add human voice; takes precedence over other style guidance |
+| [`technical-writing`](skills/technical-writing/) | Formal doc standard (Diátaxis, Google style, STE, Global English) for docs/RFCs/PRs/commits; composes with `unslop` (source: [cursor/plugins](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md)) |
+| [`youtube-transcript`](skills/youtube-transcript/) | Fetch timestamped YouTube video transcripts via `youtube-transcript-plus` (source: [badlogic/pi-skills](https://github.com/badlogic/pi-skills/tree/main/youtube-transcript)) |
 
 ## Prompts
 
@@ -122,7 +127,6 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`create_user_story.md`](prompts/create_user_story.md) | Write clear technical user stories formatted for all stakeholders |
 | [`edit-article.md`](prompts/edit-article.md) | Edit/revise article drafts: restructure sections by dependency, tighten prose (source: [mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/personal/edit-article/SKILL.md)) |
 | [`extract_wisdom.md`](prompts/extract_wisdom.md) | Extract surprising and insightful information from text |
-| [`humanize.md`](prompts/humanize.md) | Rewrite AI-generated text to sound natural and conversational |
 | [`security-audit.md`](prompts/security-audit.md) | Comprehensive security audit (OWASP, deps, secrets) |
 | [`summarize-url.md`](prompts/summarize-url.md) | Fetch and summarize URLs (including HN posts + comments) |
 | [`commit.md`](prompts/commit.md) | `/commit` slash command. Preloads `git status`/`diff`/`log` via `inline-bash` and delegates formatting to the `commit` skill |

@@ -627,7 +627,7 @@ export default function (pi: ExtensionAPI) {
     const { session } = await createAgentSession({
       sessionManager: SessionManager.inMemory(),
       model: ctx.model,
-      modelRegistry: ctx.modelRegistry as AgentSession["modelRegistry"],
+      modelRuntime: (ctx.modelRegistry as any).runtime,
       thinkingLevel: pi.getThinkingLevel() as SessionThinkingLevel,
       tools: ["read", "bash", "edit", "write"],
       resourceLoader: createBtwResourceLoader(ctx),
@@ -815,15 +815,17 @@ export default function (pi: ExtensionAPI) {
       throw new Error("No active model selected.");
     }
 
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-    if (auth.ok === false) {
-      throw new Error(auth.error);
+    if (model.provider !== "claude-bridge") {
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+      if (auth.ok === false) {
+        throw new Error(auth.error);
+      }
     }
 
     const { session } = await createAgentSession({
       sessionManager: SessionManager.inMemory(),
       model,
-      modelRegistry: ctx.modelRegistry as AgentSession["modelRegistry"],
+      modelRuntime: (ctx.modelRegistry as any).runtime,
       thinkingLevel: "off",
       tools: [],
       resourceLoader: createBtwResourceLoader(ctx, [BTW_SUMMARY_PROMPT]),
@@ -905,12 +907,14 @@ export default function (pi: ExtensionAPI) {
       return;
     }
 
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-    if (auth.ok === false) {
-      const message = auth.error;
-      setOverlayStatus(message);
-      notify(ctx, message, "error");
-      return;
+    if (model.provider !== "claude-bridge") {
+      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+      if (auth.ok === false) {
+        const message = auth.error;
+        setOverlayStatus(message);
+        notify(ctx, message, "error");
+        return;
+      }
     }
 
     if (sideBusy) {

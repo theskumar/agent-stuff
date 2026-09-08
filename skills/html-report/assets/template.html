@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F5F5F1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0C0C0E" media="(prefers-color-scheme: dark)">
+<title>{{TITLE}}</title>
+<style>
+/* ============================================================
+   FUELED BRAND TOKENS + component kit.
+   Edit this file to rebrand every report at once.
+   Base CSS is always emitted. Optional component blocks are wrapped in
+   build markers and dropped by scripts/build.py when their class is
+   absent from the body fragment.
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Host+Grotesk:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root{
+  --fueled-black:#000000;--fueled-white:#F5F5F1;--fueled-nebula:#6652FF;
+  --fueled-tech-grey:#EAEAEA;--fueled-cryo:#00A6FF;--fueled-solar:#FF52B7;--fueled-nova:#FBBC09;
+  --brand-font-display:"Aeonik","Host Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --brand-font-body:"Aeonik","Host Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --brand-font-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --brand-radius:8px;--brand-radius-sm:4px;--brand-radius-pill:100px;
+  --brand-maxw:1080px;--brand-gap:18px;
+}
+
+/* LIGHT (default surface). Verdict follows the theme: a light card on light. */
+:root,[data-theme="light"]{
+  color-scheme:light;
+  --brand-paper:#F5F5F1;--brand-card:#FFFFFF;--brand-line:#EAEAEA;--brand-line-strong:#D8D8D3;
+  --brand-ink:#000000;--brand-ink-soft:#45454A;--brand-muted:#8A8A85;
+  --brand-accent:#6652FF;--brand-accent-2:#00A6FF;--brand-accent-tint:#EEEBFF;
+  --ok:#2F7A4F;--ok-ink:#215838;--ok-bg:#E4F1EA;
+  --warn:#FBBC09;--warn-ink:#7A5C05;--warn-bg:#FDF1D0;
+  --bad:#B23A38;--bad-ink:#8F2C2A;--bad-bg:#F9E1E0;
+  --verdict-bg:#FFFFFF;--verdict-fg:#000000;--verdict-muted:#8A8A85;--verdict-border:#EAEAEA;
+  --track:#EDEDE9;
+}
+
+/* DARK. Verdict follows the theme: a dark card on dark. */
+[data-theme="dark"]{
+  color-scheme:dark;
+  --brand-paper:#0C0C0E;--brand-card:#161618;--brand-line:#26262A;--brand-line-strong:#34343A;
+  --brand-ink:#F5F5F1;--brand-ink-soft:#B7B7BD;--brand-muted:#87878E;
+  --brand-accent:#8C7DFF;--brand-accent-2:#3FB8FF;--brand-accent-tint:#211E3D;
+  --ok:#57C98A;--ok-ink:#57C98A;--ok-bg:#122A1D;
+  --warn:#F2C230;--warn-ink:#F2C230;--warn-bg:#312712;
+  --bad:#F1706D;--bad-ink:#F1706D;--bad-bg:#371A19;
+  --verdict-bg:#161618;--verdict-fg:#F5F5F1;--verdict-muted:#9C9DA8;--verdict-border:#26262A;
+  --track:#26262A;
+}
+
+/* AUTO follows the OS. Default theme is Auto. */
+@media (prefers-color-scheme: dark){
+  [data-theme="auto"]{
+    color-scheme:dark;
+    --brand-paper:#0C0C0E;--brand-card:#161618;--brand-line:#26262A;--brand-line-strong:#34343A;
+    --brand-ink:#F5F5F1;--brand-ink-soft:#B7B7BD;--brand-muted:#87878E;
+    --brand-accent:#8C7DFF;--brand-accent-2:#3FB8FF;--brand-accent-tint:#211E3D;
+    --ok:#57C98A;--ok-ink:#57C98A;--ok-bg:#122A1D;
+    --warn:#F2C230;--warn-ink:#F2C230;--warn-bg:#312712;
+    --bad:#F1706D;--bad-ink:#F1706D;--bad-bg:#371A19;
+    --verdict-bg:#161618;--verdict-fg:#F5F5F1;--verdict-muted:#9C9DA8;--verdict-border:#26262A;
+    --track:#26262A;
+  }
+}
+
+*{box-sizing:border-box}
+html{color-scheme:light dark;background:var(--brand-paper);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--brand-paper);color:var(--brand-ink);font-family:var(--brand-font-body);font-weight:400;font-size:19px;line-height:1.6;-webkit-font-smoothing:antialiased;transition:background .2s ease,color .2s ease}
+.page{background:var(--brand-paper);min-height:100vh}
+.wrap{max-width:var(--brand-maxw);margin:0 auto;padding:0 28px}
+a{color:var(--brand-accent);text-underline-offset:2px}
+
+.eyebrow{font-family:var(--brand-font-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-muted);font-weight:500}
+
+header{border-bottom:1px solid var(--brand-line);background:var(--brand-paper)}
+.masthead{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 0}
+.brandlogo{height:28px;width:auto;display:block;color:var(--brand-ink)}
+h1.title{font-family:var(--brand-font-display);font-weight:500;letter-spacing:-.02em;line-height:1.06;font-size:clamp(34px,5vw,56px);margin:14px 0 0}
+.thesis{font-size:clamp(19px,2.3vw,23px);color:var(--brand-ink-soft);max-width:60ch;margin:18px 0 0;line-height:1.45}
+
+section{padding:44px 0;border-top:1px solid var(--brand-line)}
+h2{font-family:var(--brand-font-display);font-weight:500;letter-spacing:-.02em;font-size:clamp(23px,3vw,31px);line-height:1.14;margin:0}
+h3{font-family:var(--brand-font-display);font-weight:500;letter-spacing:-.01em;font-size:19px;margin:26px 0 0}
+.lede{font-size:19px;color:var(--brand-ink-soft);margin:12px 0 0;line-height:1.5}
+ul{padding-left:20px}li{margin:7px 0}
+.src-line{font-family:var(--brand-font-mono);font-size:12px;color:var(--brand-muted);margin-top:12px}
+
+.theme-toggle{display:inline-flex;background:var(--brand-card);border:1px solid var(--brand-line-strong);border-radius:var(--brand-radius-pill);padding:3px;flex:none}
+.theme-toggle button{font-family:var(--brand-font-mono);font-size:11px;letter-spacing:.04em;text-transform:uppercase;border:0;background:transparent;color:var(--brand-ink-soft);padding:6px 12px;border-radius:var(--brand-radius-pill);cursor:pointer;transition:background .15s ease,color .15s ease}
+.theme-toggle button[aria-pressed="true"]{background:var(--brand-ink);color:var(--brand-paper)}
+.theme-toggle button:focus-visible{outline:2px solid var(--brand-accent);outline-offset:2px}
+
+footer{border-top:1px solid var(--brand-line);padding:28px 0 56px;font-family:var(--brand-font-mono);font-size:12.5px;color:var(--brand-muted)}
+
+/* @c:tag */
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--brand-font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:500;padding:4px 9px;border-radius:var(--brand-radius-pill);color:var(--brand-accent);background:var(--brand-accent-tint)}
+/* @/c */
+
+/* @c:verdict */
+.verdict{background:var(--verdict-bg);color:var(--verdict-fg);border:1px solid var(--verdict-border);border-top:3px solid var(--brand-accent);border-radius:calc(var(--brand-radius) + 4px);padding:30px 34px}
+.verdict .eyebrow{color:var(--verdict-muted)}
+.verdict h2{color:var(--verdict-fg);margin:12px 0 0}
+.verdict p{color:var(--verdict-fg);opacity:.82;max-width:66ch;margin:14px 0 0;line-height:1.55}
+/* @/c */
+
+/* @c:pill */
+.pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--brand-font-mono);font-size:11px;font-weight:500;padding:3px 9px;border-radius:var(--brand-radius-pill)}
+.pill.ok{background:var(--ok-bg);color:var(--ok-ink)}
+.pill.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.pill.bad{background:var(--bad-bg);color:var(--bad-ink)}
+/* @/c */
+
+/* @c:data */
+table.data{width:100%;border-collapse:collapse;background:var(--brand-card);border:1px solid var(--brand-line);border-radius:var(--brand-radius);overflow:hidden;font-family:var(--brand-font-display);font-size:15px;margin-top:16px}
+table.data th{text-align:left;font-weight:500;padding:13px 18px;background:var(--brand-accent-tint);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--brand-ink)}
+table.data td{padding:13px 18px;border-top:1px solid var(--brand-line);color:var(--brand-ink-soft);vertical-align:top}
+table.data td strong{color:var(--brand-ink);font-weight:600}
+/* @/c */
+
+/* @c:finding */
+.finding{border-left:3px solid var(--ok);background:var(--brand-card);border:1px solid var(--brand-line);border-radius:var(--brand-radius-sm);padding:16px 20px;margin-top:12px}
+.finding.hypothesis{border-left-color:var(--warn)}
+.finding .kind{font-family:var(--brand-font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ok-ink)}
+.finding.hypothesis .kind{color:var(--warn-ink)}
+.finding p{margin:8px 0 0;font-size:16px;line-height:1.5}
+.finding .cite{font-family:var(--brand-font-mono);font-size:12px;color:var(--brand-muted);margin-top:8px}
+/* @/c */
+
+/* @c:card,grid2 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.card{background:var(--brand-card);border:1px solid var(--brand-line);border-radius:var(--brand-radius);padding:20px 22px}
+.card h3{margin:0}
+.card p{font-size:16px;color:var(--brand-ink-soft);margin:10px 0 0;line-height:1.5}
+/* @/c */
+
+/* @c:track,weights,fill */
+.weights{margin-top:18px;display:grid;gap:10px;max-width:520px}
+.weightrow{display:grid;grid-template-columns:130px 1fr;align-items:center;gap:12px}
+.weightrow .lbl{font-family:var(--brand-font-mono);font-size:12px;color:var(--brand-ink-soft)}
+.track{height:24px;background:var(--track);border-radius:5px;overflow:hidden}
+.fill{height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-family:var(--brand-font-mono);font-size:11px;background:var(--brand-accent)}
+/* @/c */
+
+/* @c:diff */
+.diff{font-family:var(--brand-font-mono);font-size:13px;background:var(--brand-card);border:1px solid var(--brand-line);border-radius:var(--brand-radius);overflow:hidden;margin-top:16px}
+.diff .row{display:grid;grid-template-columns:1fr 320px;border-top:1px solid var(--brand-line)}
+.diff .code{padding:6px 14px;white-space:pre-wrap}
+.diff .code.add{background:var(--ok-bg)}
+.diff .code.del{background:var(--bad-bg)}
+.diff .note{padding:8px 14px;border-left:1px solid var(--brand-line);font-family:var(--brand-font-body);font-size:14px;color:var(--brand-ink-soft)}
+/* @/c */
+
+/* @c:export */
+.export{font-family:var(--brand-font-mono);font-size:13px;border:0;background:var(--brand-ink);color:var(--brand-paper);padding:10px 18px;border-radius:var(--brand-radius-pill);cursor:pointer}
+.export:focus-visible{outline:2px solid var(--brand-accent);outline-offset:2px}
+/* @/c */
+
+/* @c:sources */
+.sources{font-family:var(--brand-font-mono);font-size:12.5px;color:var(--brand-muted);line-height:1.8}
+/* @/c */
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:760px){body{font-size:18px}.verdict{padding:24px 22px}.grid2{grid-template-columns:1fr}.diff .row{grid-template-columns:1fr}.diff .note{border-left:0;border-top:1px solid var(--brand-line)}.weightrow{grid-template-columns:100px 1fr}.brandlogo{height:24px}.theme-toggle button{padding:6px 10px}}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <div class="wrap">
+    <div class="masthead">
+      <svg class="brandlogo" width="852" height="160" viewBox="0 0 852 160" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M592.89 159.692H568.813V0.191406H592.89V159.692ZM307.814 21.4395H288.1C284.26 21.4395 281.454 22.3284 279.682 24.1064C278.057 25.8845 277.245 28.7002 277.245 32.5527V46.6553H307.593V67.7695H277.245V159.582H253.101V67.7695H233.386V46.6553H253.101V30.7744C253.101 20.6988 255.685 13.1424 260.854 8.10449C266.022 2.91838 273.997 0.325195 284.777 0.325195H307.814V21.4395ZM497.989 42.3438C508.917 42.3438 518.516 44.5665 526.786 49.0117C535.204 53.457 541.775 59.7547 546.501 67.9043C551.374 76.0537 553.884 85.6107 554.032 96.5752C554.032 99.5387 553.81 102.577 553.367 105.688H467.863V107.021C468.454 116.949 471.555 124.803 477.167 130.582C482.779 136.361 490.237 139.25 499.54 139.25C506.924 139.25 513.127 137.546 518.147 134.138C523.168 130.582 526.491 125.617 528.115 119.246H552.038C549.971 130.804 544.359 140.288 535.203 147.696C526.195 155.105 514.898 158.809 501.312 158.809C489.499 158.809 479.161 156.438 470.301 151.696C461.588 146.807 454.794 139.99 449.921 131.248C445.195 122.506 442.833 112.356 442.833 100.799C442.833 89.0933 445.121 78.8691 449.699 70.127C454.425 61.2366 460.923 54.4203 469.192 49.6787C477.61 44.789 487.209 42.3438 497.989 42.3438ZM665.062 42.3438C675.989 42.3438 685.589 44.5665 693.858 49.0117C702.276 53.4569 708.847 59.7548 713.572 67.9043C718.445 76.0537 720.957 85.6105 721.104 96.5752C721.104 99.5387 720.882 102.577 720.439 105.688H634.936V107.021C635.526 116.949 638.628 124.803 644.239 130.582C649.851 136.361 657.309 139.25 666.612 139.25C673.996 139.25 680.198 137.546 685.219 134.138C690.24 130.582 693.563 125.618 695.188 119.246H719.11C717.043 130.804 711.431 140.288 702.275 147.696C693.267 155.105 681.97 158.809 668.384 158.809C656.57 158.809 646.233 156.438 637.372 151.696C628.659 146.807 621.866 139.99 616.993 131.248C612.268 122.506 609.904 112.356 609.904 100.799C609.904 89.0932 612.194 78.8692 616.771 70.127C621.497 61.2365 627.995 54.4203 636.265 49.6787C644.682 44.789 654.281 42.3438 665.062 42.3438ZM851.613 101.678C851.613 133.906 826.582 158.577 793.799 158.577C760.793 158.577 735.983 133.017 735.983 101.678C735.983 68.5609 759.907 44.3342 792.69 44.334C807.31 44.334 820.601 50.7801 829.462 60.5596L829.684 0.164062H851.613V101.678ZM346.007 99.6758C346.007 119.679 356.861 137.238 376.797 137.238C396.954 137.238 408.03 119.68 408.03 99.4541V47H429.96V102.121C429.96 133.682 410.91 158.575 376.797 158.575C343.127 158.575 324.077 133.46 324.077 101.898V47H346.007V99.6758ZM793.799 65.2266C773.641 65.2266 757.913 81.6739 757.913 101.455C757.913 121.459 773.641 137.906 793.799 137.906C814.178 137.906 829.684 121.458 829.684 101.455C829.683 81.6741 814.178 65.2268 793.799 65.2266ZM498.875 61.6807C491.048 61.6808 484.255 64.126 478.496 69.0156C472.885 73.7572 469.636 80.1286 468.75 88.1299H529.666C528.632 79.8321 525.309 73.3864 519.697 68.793C514.233 64.0515 507.292 61.6807 498.875 61.6807ZM665.947 61.6807C658.121 61.6807 651.328 64.1259 645.568 69.0156C639.957 73.7572 636.707 80.1285 635.821 88.1299H696.737C695.704 79.8321 692.381 73.3864 686.77 68.793C681.306 64.0514 674.365 61.6807 665.947 61.6807Z" fill="currentColor"/> <mask id="mask0_146_1499" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="21" width="160" height="139"> <path d="M84.0298 67.5H159.395L45.5415 159.916L75.2476 88.2881H0.205566L28.3569 21.4043H103.432L84.0298 67.5Z" fill="#F5F5F1"/> </mask> <g mask="url(#mask0_146_1499)"> <g style="mix-blend-mode:screen" filter="url(#filter0_f_146_1499)"> <circle cx="79.2231" cy="138.432" r="72.2589" transform="rotate(-176.724 79.2231 138.432)" fill="#FBBC09"/> </g> <g style="mix-blend-mode:screen" filter="url(#filter1_f_146_1499)"> <circle cx="112.117" cy="123.59" r="72.2589" transform="rotate(-176.724 112.117 123.59)" fill="#FF52B7"/> </g> <g style="mix-blend-mode:screen" filter="url(#filter2_f_146_1499)"> <circle cx="25.0224" cy="103.029" r="72.2589" transform="rotate(-176.724 25.0224 103.029)" fill="#0095FF"/> </g> <g filter="url(#filter3_f_146_1499)"> <circle cx="10.936" cy="176.545" r="72.2589" transform="rotate(-176.724 10.936 176.545)" fill="#7852FF"/> </g> <g style="mix-blend-mode:screen" filter="url(#filter4_f_146_1499)"> <circle cx="40.7002" cy="38.129" r="72.2589" transform="rotate(-176.724 40.7002 38.129)" fill="#7852FF"/> </g> </g> <defs> <filter id="filter0_f_146_1499" x="-16.3314" y="42.878" width="191.109" height="191.109" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"> <feFlood flood-opacity="0" result="BackgroundImageFix"/> <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/> <feGaussianBlur stdDeviation="11.6467" result="effect1_foregroundBlur_146_1499"/> </filter> <filter id="filter1_f_146_1499" x="16.5621" y="28.0362" width="191.109" height="191.109" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"> <feFlood flood-opacity="0" result="BackgroundImageFix"/> <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/> <feGaussianBlur stdDeviation="11.6467" result="effect1_foregroundBlur_146_1499"/> </filter> <filter id="filter2_f_146_1499" x="-70.5321" y="7.4752" width="191.109" height="191.109" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"> <feFlood flood-opacity="0" result="BackgroundImageFix"/> <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/> <feGaussianBlur stdDeviation="11.6467" result="effect1_foregroundBlur_146_1499"/> </filter> <filter id="filter3_f_146_1499" x="-102.694" y="62.9149" width="227.26" height="227.26" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"> <feFlood flood-opacity="0" result="BackgroundImageFix"/> <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/> <feGaussianBlur stdDeviation="20.6844" result="effect1_foregroundBlur_146_1499"/> </filter> <filter id="filter4_f_146_1499" x="-54.8544" y="-57.4252" width="191.109" height="191.109" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"> <feFlood flood-opacity="0" result="BackgroundImageFix"/> <feBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/> <feGaussianBlur stdDeviation="11.6467" result="effect1_foregroundBlur_146_1499"/> </filter> </defs> </svg>
+      <div class="theme-toggle" role="group" aria-label="Color theme">
+        <button data-theme-btn="light" aria-pressed="false" onclick="__setTheme('light')">Light</button>
+        <button data-theme-btn="dark" aria-pressed="false" onclick="__setTheme('dark')">Dark</button>
+        <button data-theme-btn="auto" aria-pressed="true" onclick="__setTheme('auto')">Auto</button>
+      </div>
+    </div>
+    <div style="padding:40px 0 32px">
+      <span class="eyebrow">{{EYEBROW}}</span>
+      <h1 class="title">{{TITLE}}</h1>
+      <p class="thesis">{{THESIS}}</p>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<!-- BODY -->
+</div>
+
+<footer>
+  <div class="wrap">Generated with the html-report skill · subject: {{SUBJECT}} · lens: {{LENS}} · projection: {{PROJECTION}}</div>
+</footer>
+</div>
+
+<script>
+/* Light / Dark / Auto. Defaults to Auto; remembers the last choice. */
+(function(){
+  var root=document.documentElement, KEY='fueled-report-theme';
+  function paint(t){
+    root.setAttribute('data-theme',t);
+    var b=document.querySelectorAll('[data-theme-btn]');
+    for(var i=0;i<b.length;i++){b[i].setAttribute('aria-pressed', String(b[i].getAttribute('data-theme-btn')===t));}
+    try{localStorage.setItem(KEY,t);}catch(e){}
+  }
+  window.__setTheme=paint;
+  var saved='auto'; try{saved=localStorage.getItem(KEY)||'auto';}catch(e){}
+  paint(saved);
+})();
+</script>
+</body>
+</html>

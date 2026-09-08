@@ -60,13 +60,13 @@ link "$REPO_DIR/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github granola librarian uv summarize mermaid sentry notion pr-summary codemagic ketch)
+CC_SKILLS=(commit github granola librarian uv summarize mermaid sentry notion pr-summary codemagic ketch unslop technical-writing html-report youtube-transcript)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
 
 echo "==> Skills → ~/.pi/agent/skills/ (pi agent)"
-PI_SKILLS=(google-workspace librarian mermaid notion sentry codemagic ketch)
+PI_SKILLS=(google-workspace librarian mermaid notion sentry codemagic ketch youtube-transcript)
 for name in "${PI_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.pi/agent/skills/$name"
 done
@@ -96,7 +96,6 @@ CC_PROMPTS=(
   edit-article
   extract_wisdom
   handoff
-  humanize
 )
 for name in "${CC_PROMPTS[@]}"; do
   link "$REPO_DIR/prompts/$name.md" "$HOME/.claude/commands/$name.md"
