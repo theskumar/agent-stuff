@@ -93,15 +93,20 @@ Example output:
   ]
 }`;
 
+type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 interface AnswerConfig {
   provider: string;
   model: string;
+  /** Reasoning effort for reasoning models. Ignored by providers that do not support it. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "extensions", "answer.config.json");
 const DEFAULT_CONFIG: AnswerConfig = {
-  provider: "claude-bridge",
-  model: "claude-haiku-4-5",
+  provider: "openai-codex",
+  model: "gpt-6-luna",
+  reasoningEffort: "low",
 };
 
 /**
@@ -116,6 +121,7 @@ function loadConfig(): AnswerConfig {
       return {
         provider: parsed.provider || DEFAULT_CONFIG.provider,
         model: parsed.model || DEFAULT_CONFIG.model,
+        reasoningEffort: parsed.reasoningEffort || DEFAULT_CONFIG.reasoningEffort,
       };
     }
   } catch {
@@ -550,10 +556,19 @@ export default function (pi: ExtensionAPI) {
           timestamp: Date.now(),
         };
 
+        // reasoningEffort only reaches reasoning-capable OpenAI/codex adapters;
+        // other providers ignore the extra key.
         const response = await complete(
           extractionModel,
           { systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
-          { apiKey: auth.apiKey, headers: auth.headers, signal: loader.signal },
+          {
+            apiKey: auth.apiKey,
+            headers: auth.headers,
+            signal: loader.signal,
+            ...(resolved.configured.reasoningEffort
+              ? { reasoningEffort: resolved.configured.reasoningEffort }
+              : {}),
+          },
         );
 
         if (response.stopReason === "aborted") {
