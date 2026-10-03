@@ -97,7 +97,6 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`commit`](skills/commit/) | Conventional Commit messages |
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
-| [`granola`](skills/granola/) | Extract and search Granola meeting transcripts from local cache |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
 | [`ketch`](skills/ketch/) | External research via `ketch` CLI: web search, OSS code search, library docs, scrape/crawl (vendored from [1broseidon/ketch](https://github.com/1broseidon/ketch)) |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts (GitHub, GitLab, Codeberg, Bitbucket, sourcehut, self-hosted) |
