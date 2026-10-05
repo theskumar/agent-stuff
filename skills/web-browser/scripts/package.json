@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "@browser_use/pi": "0.1.0",
     "@mozilla/readability": "^0.6.0",
     "jsdom": "^29.1.1",
     "turndown": "^7.2.4",

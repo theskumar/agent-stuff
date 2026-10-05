@@ -108,7 +108,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |
-| [`web-browser`](skills/web-browser/) | Interactive browser automation via Chrome DevTools Protocol |
+| [`web-browser`](skills/web-browser/) | Browser automation via CDP: accessibility-tree actions (`ax.js`), Obscura scraping, and `agent.mjs` to delegate a web task to a cheap inner agent |
 | [`unslop`](skills/unslop/) | Cut AI tells from prose and add human voice; takes precedence over other style guidance |
 | [`technical-writing`](skills/technical-writing/) | Formal doc standard (Diátaxis, Google style, STE, Global English) for docs/RFCs/PRs/commits; composes with `unslop` (source: [cursor/plugins](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md)) |
 | [`youtube-transcript`](skills/youtube-transcript/) | Fetch timestamped YouTube video transcripts via `youtube-transcript-plus` (source: [badlogic/pi-skills](https://github.com/badlogic/pi-skills/tree/main/youtube-transcript)) |
