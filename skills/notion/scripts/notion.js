@@ -171,7 +171,7 @@ function printHelp() {
 Usage:
   node scripts/notion.js whoami
   node scripts/notion.js page get <id-or-url> [--json]
-  node scripts/notion.js page create --parent <page:id|database:id|data-source:id> [--content <md>]
+  node scripts/notion.js page create [--parent <page:id|database:id|data-source:id>] [--content <md>]  # no --parent = private page
   node scripts/notion.js page update <id-or-url> [--content <md>] [--allow-deleting-content]
   node scripts/notion.js page trash <id-or-url> [--no-yes]
   node scripts/notion.js blocks list <id-or-url> [--limit N] [--json]
@@ -231,7 +231,7 @@ async function cmdPage(opts, positional) {
   }
 
   if (sub === 'create') {
-    if (!opts.parent) throw new Error('--parent <page:id|database:id|data-source:id> required');
+    // No --parent = private workspace-level page (user-owned ntn OAuth token).
     const content = await readContent(opts);
     const result = await ntn.pageCreate({ parent: opts.parent, content });
     console.log(typeof result === 'string' ? result : JSON.stringify(result, null, 2));

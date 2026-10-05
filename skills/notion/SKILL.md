@@ -35,6 +35,7 @@ Zero npm deps. Requires `node` (stdlib) and `ntn` on PATH.
 node scripts/notion.js whoami                          # identity (parsed from `ntn whoami`)
 node scripts/notion.js page get <id-or-url> [--json]   # markdown to stdout
 node scripts/notion.js page create --parent <ref> [--content <md>]
+node scripts/notion.js page create < page.md     # no --parent = private page (only you); leading # H1 = title; GFM tables + > [!NOTE] alerts (→ callouts) OK
 node scripts/notion.js page update <id-or-url> [--content <md>] [--allow-deleting-content]
 node scripts/notion.js page trash <id-or-url> [--no-yes]
 node scripts/notion.js blocks list <id-or-url> [--limit N] [--json]     # id + type + text preview

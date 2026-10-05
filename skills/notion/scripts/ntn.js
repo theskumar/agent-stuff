@@ -117,6 +117,40 @@ function tryParseJson(text) {
   }
 }
 
+// ---------- markdown preprocessing ----------
+
+// GitHub alerts (> [!NOTE] ...) -> Notion <callout>. Notion's markdown import
+// otherwise renders them as plain quotes. Code fences are left untouched.
+const ALERTS = {
+  NOTE: ['ℹ️', 'blue_bg'],
+  TIP: ['💡', 'green_bg'],
+  IMPORTANT: ['❗', 'purple_bg'],
+  WARNING: ['⚠️', 'yellow_bg'],
+  CAUTION: ['🛑', 'red_bg'],
+};
+
+function gfmAlertsToCallouts(md) {
+  const lines = md.split('\n');
+  const out = [];
+  let fence = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const f = line.match(/^\s*(`{3,}|~{3,})/);
+    if (f) fence = fence === null ? f[1] : (line.trim().startsWith(fence) ? null : fence);
+    const m = fence === null && line.match(/^\s*>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+    if (!m) { out.push(line); continue; }
+    const [icon, color] = ALERTS[m[1].toUpperCase()];
+    const body = [];
+    if (m[2].trim()) body.push(`**${m[2].trim()}**`);
+    while (i + 1 < lines.length && /^\s*>/.test(lines[i + 1])) {
+      const text = lines[++i].replace(/^\s*>\s?/, '');
+      if (text.trim()) body.push(text);
+    }
+    out.push(`<callout icon="${icon}" color="${color}">`, ...body.map((b) => `\t${b}`), '</callout>');
+  }
+  return out.join('\n');
+}
+
 // ---------- pages ----------
 
 async function pageGet(idOrUrl, { json = false, notionVersion } = {}) {
@@ -129,13 +163,13 @@ async function pageGet(idOrUrl, { json = false, notionVersion } = {}) {
 }
 
 async function pageCreate({ parent, content, notionVersion } = {}) {
-  if (!parent) throw new Error('pageCreate: parent required (e.g. "page:<id>")');
   if (content === undefined || content === null) {
     throw new Error('pageCreate: content (markdown string) required');
   }
-  const args = ['pages', 'create', '--parent', parent];
+  const args = ['pages', 'create'];
+  if (parent) args.push('--parent', parent);
   if (notionVersion) args.push('--notion-version', notionVersion);
-  const { stdout } = await runNtn({ args, stdin: content });
+  const { stdout } = await runNtn({ args, stdin: gfmAlertsToCallouts(content) });
   return tryParseJson(stdout);
 }
 
@@ -150,7 +184,7 @@ async function pageUpdate(
   const args = ['pages', 'update', id];
   if (allowDeletingContent) args.push('--allow-deleting-content');
   if (notionVersion) args.push('--notion-version', notionVersion);
-  const { stdout } = await runNtn({ args, stdin: content });
+  const { stdout } = await runNtn({ args, stdin: gfmAlertsToCallouts(content) });
   return tryParseJson(stdout);
 }
 
