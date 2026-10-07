@@ -12,12 +12,16 @@ const {
   normalizeEmail,
   resolveAuthMode,
 } = require('./common');
+const { createHelpers } = require('./helpers');
 
 function printHelp() {
   console.log(`Google Workspace API helper (exec-only)
 
 Usage:
-  node scripts/workspace.js exec --email user@example.com [--script 'return 1'] [--timeout 30000] [--scopes s1,s2]
+  node scripts/workspace.js exec --email user@example.com [--script 'return 1' | --file job.js] [arg ...] [--timeout 30000] [--scopes s1,s2]
+
+Inside the script: workspace.call/service/whoAmI, workspace.gmail.search/read,
+workspace.calendar.events/free/create, and args (extra positionals with --script/--file).
 
 Example:
   node scripts/workspace.js exec --email user@example.com <<'JS'
@@ -51,6 +55,7 @@ function parseOptions(argv) {
     scopes: undefined,
     timeout: undefined,
     script: undefined,
+    file: undefined,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -78,6 +83,16 @@ function parseOptions(argv) {
 
     if (arg === '--timeout') {
       options.timeout = parseTimeout(argv[i + 1]);
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--file') {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error('--file requires a path');
+      }
+      options.file = value;
       i += 1;
       continue;
     }
@@ -170,7 +185,7 @@ function getServiceClient({ google, auth, service, version }) {
 }
 
 function createWorkspaceHelper({ auth, google, email }) {
-  return {
+  const ws = {
     accountEmail: email,
     versions: { ...DEFAULT_VERSIONS },
 
@@ -200,6 +215,8 @@ function createWorkspaceHelper({ auth, google, email }) {
       return response?.data ?? response;
     },
   };
+  Object.assign(ws, createHelpers(ws));
+  return ws;
 }
 
 function formatLogArg(value) {
@@ -365,6 +382,10 @@ async function cmdExec(args, options) {
 
   let script = options.script;
 
+  if (!script && options.file) {
+    script = require('node:fs').readFileSync(options.file, 'utf8');
+  }
+
   if (!script && args.length > 0) {
     script = args.join(' ');
   }
@@ -408,6 +429,7 @@ async function cmdExec(args, options) {
       auth,
       google,
       workspace,
+      args: options.file || options.script ? args : [],
     });
 
     const wrappedScript = `

@@ -105,6 +105,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
+| [`slack`](skills/slack/) | Read and search Slack (catchup, threads, users) and create editable drafts through the Claude.ai Slack connector, no bot token |
 | [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `ketch` for URLs |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |

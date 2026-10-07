@@ -49,12 +49,22 @@ Available inside exec scripts:
 - `workspace.call(service, methodPath, params, {version})`
 - `workspace.service(service, {version})`
 - `workspace.whoAmI()`
+- `workspace.gmail.search(q, {max, body, maxChars})`, `workspace.gmail.read(id)`: flat `{from, subject, date, snippet, text}`; `text` is the plain-text body
+- `workspace.calendar.events(date | fromISO, toISO)`: one day or a range, in the calendar's time zone
+- `workspace.calendar.free({emails, from, to, minMins})`: common free slots for you plus `emails`
+- `workspace.calendar.create({title, start, mins, attendees, meet, description, colorId, notify})`: Meet link and invites by default
+- `args`: extra positionals after `--script`/`--file`, so a saved job takes parameters
+
+Task helpers live in `scripts/helpers.js`. Add a helper there when a pattern repeats across tasks; keep one-off logic in the exec script.
 
 Optional flags:
 
 - `--timeout <ms>` (default 30000, max 300000)
 - `--scopes s1,s2`
 - `--script 'return 42'`
+- `--file job.js [arg ...]`: run a saved script; positionals arrive as `args`
+
+Piping the output: put the pipe on the command line, not after the heredoc terminator (`exec ... <<'JS' | jq .`), or use `--script "$CODE"`.
 
 ## Agent guidance
 
