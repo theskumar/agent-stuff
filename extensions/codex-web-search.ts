@@ -1,23 +1,41 @@
 /**
  * codex_web_search: web search through the ChatGPT Codex backend.
  *
- * Reuses pi's `openai-codex` login (the ChatGPT subscription), so searches
- * draw on the plan's quota instead of per-call API billing. The Codex
- * Responses endpoint accepts the hosted `web_search` tool; a small model runs
- * the searches and returns a short cited answer plus the URLs it consulted.
+ * Reuses a ChatGPT subscription login, so searches draw on the plan's quota
+ * instead of per-call API billing. Tries pi's `openai` "Sign in with ChatGPT"
+ * login first (api.openai.com Responses API, the preferred pi login), then the
+ * `openai-codex` login (Codex backend). Both accept the hosted `web_search` tool; a
+ * small model runs the searches and returns a short cited answer plus the URLs
+ * it consulted.
  *
  * Note: this calls the subscription backend from a non-Codex client, which is
  * outside what OpenAI officially supports. It may break or be rate-limited.
  *
- * Config: CODEX_SEARCH_MODEL (default gpt-5.6-luna).
+ * Config: CODEX_SEARCH_MODEL overrides the per-backend default model.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-const ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
-const DEFAULT_MODEL = "gpt-5.6-luna";
+
+type Backend = { provider: string; endpoint: string; defaultModel: string; accountHeader: boolean };
+
+// Order matters: the first provider with a login wins.
+const BACKENDS: Backend[] = [
+  {
+    provider: "openai",
+    endpoint: "https://api.openai.com/v1/responses",
+    defaultModel: "gpt-6-luna",
+    accountHeader: false,
+  },
+  {
+    provider: "openai-codex",
+    endpoint: "https://chatgpt.com/backend-api/codex/responses",
+    defaultModel: "gpt-5.6-luna",
+    accountHeader: true,
+  },
+];
 const MAX_SOURCES = 15;
 
 const INSTRUCTIONS = [
@@ -52,17 +70,18 @@ function accountIdFromToken(token: string): string {
 }
 
 async function codexSearch(
+  backend: Backend,
   token: string,
   query: string,
   model: string,
   signal?: AbortSignal,
 ): Promise<SearchResult> {
-  const res = await fetch(ENDPOINT, {
+  const res = await fetch(backend.endpoint, {
     method: "POST",
     signal,
     headers: {
       Authorization: `Bearer ${token}`,
-      "chatgpt-account-id": accountIdFromToken(token),
+      ...(backend.accountHeader ? { "chatgpt-account-id": accountIdFromToken(token) } : {}),
       originator: "pi",
       "OpenAI-Beta": "responses=experimental",
       accept: "text/event-stream",
@@ -158,7 +177,7 @@ export default function (pi: ExtensionAPI) {
     name: "codex_web_search",
     label: "Codex Web Search",
     description:
-      "Search the live web via the ChatGPT Codex backend (uses the openai-codex login). " +
+      "Search the live web via a ChatGPT subscription login (openai, else openai-codex). " +
       "Returns a concise cited answer, the queries run, and source URLs. " +
       "Use for current facts: versions, releases, docs, people, companies, news.",
     promptSnippet: "Search the live web and get a cited answer",
@@ -178,11 +197,21 @@ export default function (pi: ExtensionAPI) {
       model: Type.String(),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const token = await ctx.modelRegistry.getApiKeyForProvider("openai-codex");
-      if (!token)
-        throw new Error("No openai-codex login. Run /login and choose ChatGPT (openai-codex).");
-      const model = process.env.CODEX_SEARCH_MODEL || DEFAULT_MODEL;
-      const result = await codexSearch(token, params.query, model, signal);
+      let backend: Backend | undefined;
+      let token: string | undefined;
+      for (const b of BACKENDS) {
+        token = await ctx.modelRegistry.getApiKeyForProvider(b.provider);
+        if (token) {
+          backend = b;
+          break;
+        }
+      }
+      if (!backend || !token)
+        throw new Error(
+          "No ChatGPT login. Run /login and choose Sign in with ChatGPT (openai), or ChatGPT (openai-codex).",
+        );
+      const model = process.env.CODEX_SEARCH_MODEL || backend.defaultModel;
+      const result = await codexSearch(backend, token, params.query, model, signal);
       return {
         content: [{ type: "text", text: formatResult(result) }],
         structuredContent: {
