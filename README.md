@@ -96,6 +96,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 |---|---|
 | [`adr`](skills/adr/) | Architecture Decision Records |
 | [`commit`](skills/commit/) | Conventional Commit messages |
+| [`figma`](skills/figma/) | Read Figma designs via `figma-pp-cli`: `scripts/figma-node.sh <url>` gives a compact tree, raw nodes, text styles, and a 2x PNG. Personal access token in keychain `figma-pat` |
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
