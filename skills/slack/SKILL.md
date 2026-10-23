@@ -81,6 +81,15 @@ printf '%s' 'Exact approved multiline draft' | \
 
 If user asks only to compose wording, return proposed text without creating anything in Slack. Use `draft` only when they ask to create/save the draft in Slack.
 
+### Draft formatting
+
+`draft` takes standard Markdown, not Slack mrkdwn. Slack converts it when it saves the draft:
+
+- Use `**bold**` for bold. A single `*x*` renders as italic, not bold.
+- `_italic_`, `` `code` ``, `~strikethrough~`, `> quote`, lists, code blocks and `[text](url)` links also work.
+
+Slack allows one attached draft per channel. If one exists, `draft` fails with `attached_draft_exists`. Ask the user to send or delete the old draft, then create the new one.
+
 ## Custom JS (exec)
 
 Run arbitrary JavaScript with `call(toolName, args, opts)` and `tools` (array of tool schemas) available:
