@@ -294,10 +294,25 @@ if (useProfile) {
     .map((p) => `--include='${p}'`)
     .join(" ");
 
-  execSync(
-    `rsync -a --delete --delete-excluded ${includeRules} --exclude='*' "${srcProfileDir}/" "${destDefault}/"`,
-    { stdio: "pipe" },
-  );
+  try {
+    execSync(
+      `rsync -a --delete --delete-excluded ${includeRules} --exclude='*' "${srcProfileDir}/" "${destDefault}/"`,
+      { stdio: "pipe" },
+    );
+  } catch (err) {
+    const stderr = String(err.stderr || err.message || "");
+    if (/Operation not permitted|EPERM/i.test(stderr)) {
+      console.error("✗ macOS blocked access to your Chrome profile (Operation not permitted).");
+      console.error("  The app running this script lacks Full Disk Access.");
+      console.error("  Fix: System Settings → Privacy & Security → Full Disk Access → add that app, then re-run.");
+      console.error("  Or run start.js without --profile and log in by hand in the new window.");
+    } else {
+      console.error("✗ Copying your Chrome profile failed:");
+      console.error(`  ${stderr.trim().split("\n").slice(-3).join("\n  ")}`);
+    }
+    console.error("  No session was copied. Chrome was not started.");
+    process.exit(1);
+  }
 }
 
 for (const staleFile of [

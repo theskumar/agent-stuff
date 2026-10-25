@@ -41,10 +41,11 @@ Starts Chrome with remote debugging (default port `:9222`).
 Session copy (`--profile`):
 - Copies only **login/session** data — cookies (top-level `Cookies` and modern `Network/Cookies`), `Login Data`, `Web Data`, `Local Storage`, `Session Storage`, `IndexedDB`. Your Keychain-encrypted cookies decrypt in the isolated instance, so logged-in sites work.
 - Deliberately **not** copied: `Preferences` / `Secure Preferences` / `Local State`. Chrome HMAC-validates `Preferences` against a profile-path-bound seed; copying it into a different profile path triggers the *"Something went wrong when opening your profile"* dialog. Logins do not need it, and on macOS cookies decrypt via the Keychain key (not `Local State`). Your Chrome **settings** are therefore not carried over — only your sessions.
-- **Incremental**: `rsync` without `--delete` of the whole tree, so re-launches sync only changed files (~2s, ~tens of MB — not the multi-GB full Chrome dir).
+- **Incremental**: `rsync` copies only the paths listed above, and on re-launch transfers only changed files (~2s, ~tens of MB, not the multi-GB full Chrome dir). It runs with `--delete --delete-excluded`, so anything else in the cached `Default/` (stale files from older copies) is removed.
 - **Profile-aware**: defaults to the `Default` source profile. Pick another with `--chrome-profile <dir>`; run `--list-profiles` to see dir → display-name.
 - If your real Chrome is **running**, it warns that recently added logins may not be flushed to disk; quit Chrome for the freshest session.
 - Cached copy: `~/.cache/agent-web/browser/profile-copy` (default mode: `~/.cache/agent-web/browser/fresh-profile`).
+- **If `--profile` fails, stop and tell the user.** Don't relaunch without `--profile` unless the user agrees: a fresh profile has no logins, and they will log in to the wrong window. On macOS the usual cause is EPERM: the app hosting the agent lacks Full Disk Access. start.js prints the fix.
 
 Why copy instead of driving your live Chrome? CDP automation needs Chrome launched with `--remote-debugging-port`, and **Chrome ≥ 136 refuses to open that port on the default profile** (an anti-cookie-theft mitigation). So the port can only attach to a *non-default* `--user-data-dir`. The copy is that non-default profile, carrying your logins. It is also safer: the agent never touches your real browser tabs, history, or session. Trade-off: the copy is a snapshot — quit Chrome first for the freshest cookies.
 
