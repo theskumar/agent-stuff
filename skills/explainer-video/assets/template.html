@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- Explainer engine. Scenes: <section class="scene" data-scene="<sceneId>">. Any element: data-in="<beatId>[.<sentence>][+/-sec]" data-anim="fadeUp|fadeIn|pop|slideL|slideR|grow" data-out="<cue>".
+     Cues come from timeline.js (written by tts.py). window.seek(t) makes every frame deterministic for render.mjs / shot.mjs.
+     Add brand tokens + fonts here. Use font-display:block so the first frame is not a fallback font. -->
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500;600;700;800&display=block" rel="stylesheet">
+<style>
+:root{--bg:#0A0F1F;--card:#121933;--line:#273158;--text:#F3F4F6;--mute:#9CA3AF;--soft:#C7CBD6;--accl:#A5B4FC;--green:#34D399;--amber:#FBBF24}
+*{box-sizing:border-box} html,body{margin:0;background:#000}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--text);font-family:"Host Grotesk",-apple-system,sans-serif;font-size:30px;line-height:1.4}
+.orb{position:absolute;border-radius:50%;filter:blur(110px);opacity:.38}
+.scene{position:absolute;inset:0;padding:120px 120px 0}
+h1{font-size:104px;font-weight:800;letter-spacing:-.025em;line-height:1.02;margin:0}
+h2{font-size:66px;font-weight:800;letter-spacing:-.02em;line-height:1.08;margin:0}
+.grad{background:linear-gradient(90deg,#22D3EE,#3B82F6 30%,#8B5CF6 60%,#EC4899);-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:rgba(24,32,66,.92);border:1px solid var(--line);border-radius:28px;padding:30px 34px}
+.chip{display:inline-flex;align-items:center;gap:12px;padding:12px 24px;border-radius:999px;background:#1B2348;border:1px solid var(--line);font-size:28px;white-space:nowrap}
+.who{display:inline-flex;gap:14px;padding:12px 26px;border-radius:999px;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.45);color:#D1FAE5;font-weight:600}
+.abs{position:absolute} .row{display:flex;gap:28px;align-items:center} .soft{color:var(--soft)}
+/* fixed box + contain, so swapping in an image with a different aspect ratio cannot overflow */
+img.char{display:block;width:300px;height:300px;object-fit:contain}
+#caps{position:absolute;left:0;right:0;bottom:44px;height:120px;z-index:20}
+.cap{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center}
+.cap span{background:rgba(5,8,18,.78);padding:12px 28px;border-radius:16px;font-size:34px;max-width:1560px;text-align:center;font-weight:500}
+#prog{position:absolute;left:0;bottom:0;height:7px;width:100%;transform-origin:0 50%;background:linear-gradient(90deg,#22D3EE,#8B5CF6,#EC4899);z-index:21}
+</style></head>
+<body><div id="stage">
+<div class="orb" style="width:900px;height:900px;left:-300px;top:-380px;background:#3B82F6"></div>
+<div class="orb" style="width:800px;height:800px;right:-300px;bottom:-420px;background:#8B5CF6"></div>
+
+<section class="scene" data-scene="intro">
+  <h1 data-in="intro">How a ticket moves,<br><span class="grad">explained</span></h1>
+  <div class="chip" style="margin-top:40px" data-in="intro2" data-anim="pop">🙋 Look for who decides</div>
+</section>
+
+<section class="scene" data-scene="steps">
+  <h2 data-in="steps">Two checkpoints</h2>
+  <div class="row" style="margin-top:60px">
+    <div class="card" style="width:700px" data-in="steps1" data-anim="slideL"><b>Checker</b><div class="soft">Flags 1 gap in the ticket</div></div>
+    <div class="card" style="width:700px" data-in="steps2" data-anim="slideR"><b>Reviewer</b><div class="soft">2 comments on the PR</div></div>
+  </div>
+  <div class="who abs" style="left:120px;top:560px" data-in="steps2.1" data-anim="pop">🙋 You decide what to fix</div>
+</section>
+
+<div id="caps"></div><div id="prog"></div>
+</div>
+<script src="timeline.js"></script>
+<script>
+const {T,caps,total}=TIMELINE; const WARN=[];
+function tt(spec){spec=String(spec).trim();const m=spec.match(/^(.+?)([+-]\d+(?:\.\d+)?)?$/);let b=T[m[1]];
+  if(b===undefined){b=T[m[1].split('.')[0]];WARN.push('missing '+spec);if(b===undefined)throw new Error('no cue '+spec)}
+  return b+(m[2]?parseFloat(m[2]):0)}
+const KF={fadeUp:[{opacity:0,transform:'translateY(36px)'},{opacity:1,transform:'none'}],fadeIn:[{opacity:0},{opacity:1}],
+ pop:[{opacity:0,transform:'scale(.7)'},{opacity:1,transform:'scale(1.04)',offset:.7},{opacity:1,transform:'scale(1)'}],
+ slideL:[{opacity:0,transform:'translateX(-50px)'},{opacity:1,transform:'none'}],slideR:[{opacity:0,transform:'translateX(50px)'},{opacity:1,transform:'none'}],
+ out:[{opacity:1},{opacity:0}],grow:[{transform:'scaleX(0)'},{transform:'scaleX(1)'}]};
+function A(el,kf,at,dur=.6,o={}){return el.animate(typeof kf==='string'?KF[kf]:kf,{delay:Math.max(0,at)*1000,duration:dur*1000,fill:o.fill||'both',easing:o.easing||'cubic-bezier(.2,.8,.2,1)',iterations:o.iterations||1})}
+const capsEl=document.getElementById('caps');
+caps.forEach(([a,b,txt],i)=>{const d=document.createElement('div');d.className='cap';d.innerHTML='<span></span>';d.firstChild.textContent=txt;capsEl.appendChild(d);
+  const next=caps[i+1]?caps[i+1][0]:b+1;A(d,'fadeIn',a-0.05,.15);A(d,'out',Math.min(b+0.3,next-0.08),.12,{fill:'forwards'})});
+const scenes=[...document.querySelectorAll('.scene')];
+scenes.forEach((s,i)=>{A(s,'fadeIn',T[s.dataset.scene]-0.25,.45);if(scenes[i+1])A(s,'out',T[scenes[i+1].dataset.scene]-0.7,.45,{fill:'forwards'})});
+document.querySelectorAll('[data-in]').forEach(el=>{if(el.classList.contains('scene'))return;const an=el.dataset.anim||'fadeUp';A(el,an,tt(el.dataset.in),an==='grow'?1.2:.6)});
+document.querySelectorAll('[data-out]').forEach(el=>A(el,'out',tt(el.dataset.out),.4,{fill:'forwards'}));
+// idle float: composite:'add' so it stacks on top of the pop transform instead of replacing it
+document.querySelectorAll('img.char').forEach((el,i)=>el.animate([{transform:'translateY(0)'},{transform:'translateY(-12px)'},{transform:'translateY(0)'}],{duration:3000+i*170,iterations:Infinity,easing:'ease-in-out',composite:'add'}));
+A(document.getElementById('prog'),[{transform:'scaleX(0)'},{transform:'scaleX(1)'}],0,total,{easing:'linear'});
+window.seek=t=>{for(const a of document.getAnimations()){a.pause();a.currentTime=t*1000}};
+window.TOTAL=total;window.WARN=WARN;
+</script></body></html>

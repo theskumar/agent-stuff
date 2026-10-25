@@ -1,0 +1,1 @@
+{ "name": "explainer-video-workdir", "private": true, "type": "module", "dependencies": { "playwright-core": "^1.48.0" } }

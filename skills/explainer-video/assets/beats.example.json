@@ -1,0 +1,6 @@
+[
+ ["intro", [["intro1", "Hi team. Here's a one-minute tour of how a ticket moves through review."],
+            ["intro2", "Watch for the moments where a person makes the call."]]],
+ ["steps", [["steps1", "First, the checker reads the ticket and flags gaps."],
+            ["steps2", "Then the reviewer comments on the pull request. You decide what to fix."]]]
+]
