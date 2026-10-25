@@ -11,7 +11,7 @@ Two build pipelines share one workflow:
 - **HTML scenes** (doc, RFC or process explainer; diagrams and characters): `references/html-pipeline.md`.
 - **fframes** (product demo built from real screen recordings, camera moves, composited clips): the `fframes-video` skill, then `references/fframes.md` for what that skill leaves out.
 
-Subject is Rosey, or the video goes in a Rosey deck: read `references/rosey.md` before writing the script.
+Project notes come first. Before you write the script, read the project repo's `.context/` notes on demos and videos. For Rosey, read `.context/demo-videos.md` in `Fueled/rosey`; the local clone is usually `~/work/fueled/rosey`. Those notes hold names and internal setup, so keep them in the private repo, not in this skill.
 
 ## Workflow
 
