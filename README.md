@@ -34,13 +34,13 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`btw.ts`](extensions/btw.ts) | `/btw` side-chat popover that reuses the main conversation context; optional summary injection back into main chat on close (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`loop.ts`](extensions/loop.ts) | `/loop` runs follow-up prompts on `turn_end` until a breakout condition (tests pass / custom condition / agent-decides via `signal_loop_success` tool) (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`trust-github-repos.ts`](extensions/trust-github-repos.ts) | Auto-trust checkouts whose git origin is under `fueled`, `theskumar`, or `earendil-works` so `project_trust` never prompts for them (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), owner allowlist customized) |
-| [`codex-web-search.ts`](extensions/codex-web-search.ts) | `codex_web_search` tool: web search through a ChatGPT subscription login (plan quota, not API billing). Uses pi's `openai` login (Sign in with ChatGPT, `api.openai.com/v1/responses`, default model `gpt-6-luna`) and falls back to the `openai-codex` login (Codex backend, default `gpt-5.6-luna`). Returns a cited answer, queries run, and source URLs. Unofficial use of the subscription; may break or be rate-limited. `CODEX_SEARCH_MODEL` overrides the model |
 | [`todos.ts`](extensions/todos.ts) | `/todos` visual todo manager backed by markdown files in `.pi/todos/` |
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [-d] [prompt]` forks the current session into a new pi process in a new tmux window or herdr tab (backend auto-detected; `-d` keeps focus here) (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux/herdr) |
 | [`handoff.ts`](extensions/handoff.ts) | `/handoff <goal>` distills the session into a compact hot-state-first prompt and starts a fresh session seeded with it (`PI_HANDOFF_MODEL`, `PI_HANDOFF_MAX_TOKENS`; adapted from [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions), tuned for mid-task continuation) |
 | `npm:pi-subagent-manager` | Arnav Gupta’s hierarchical, steerable agent manager. Installed globally for trial; replaces the archived custom `subagent.ts`. See [trial notes](archive/subagents-2026-10-08/README.md). |
+| `npm:pi-web-access` | Nico Bailon's web tools: `web_search`, `fetch_content`, `get_search_content`, `source_check`. Installed globally, pinned. Search runs through the ChatGPT login with Exa as fallback. Config: `~/.pi/agent/web-search.json`. Replaces the removed `codex-web-search.ts` and `ketch` skill. See [nicobailon/pi-web-access](https://github.com/nicobailon/pi-web-access). |
 | [`view-image.ts`](extensions/view-image.ts) | `view_image` tool reads an image file and returns it as an image attachment for visual inspection; reuses the built-in read tool's result renderer so pi's inline image viewer handles display (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
 
 ## Global AGENTS.md
@@ -87,14 +87,13 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`github`](skills/github/) | `gh` CLI (PRs, issues, runs, API) |
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
-| [`ketch`](skills/ketch/) | External research via `ketch` CLI: web search, OSS code search, library docs, scrape/crawl (vendored from [1broseidon/ketch](https://github.com/1broseidon/ketch)) |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts (GitHub, GitLab, Codeberg, Bitbucket, sourcehut, self-hosted) |
 | [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`slack`](skills/slack/) | Read and search Slack (catchup, threads, users) and create editable drafts through the Claude.ai Slack connector, no bot token |
-| [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `ketch` for URLs |
+| [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `fetch_content` for URLs |
 | [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |

@@ -10,14 +10,15 @@ Baseline for technical text when neither skill is loaded: one instruction per se
 
 ## External research
 
-Two tool classes. Route by task, not by habit.
+Route by task, not by habit.
 
-- Discovery (search, code, docs): use the `ketch` CLI. `ketch search` (web), `ketch code` (OSS code), `ketch docs` (library docs). Load the `ketch` skill for the full playbook. Backends are preconfigured by the operator. Obscura has no search index, so it cannot replace these.
+- Web search: use `web_search`. Put related queries in one call with `queries`.
+- Library or framework source: use the `librarian` skill to get a cached local checkout, then read and grep it. For GitHub repository URLs, prefer `librarian` over `fetch_content`. Use `fetch_content` for GitHub pull requests and issues.
 - Fetch a known URL. You usually cannot tell static from JS-rendered before fetching, so do not try to classify upfront. Use these two rules instead:
   - Known app-shell or anti-bot domains: go straight to Obscura from the `web-browser` skill. This list includes retail, social, and maps: Amazon, Flipkart, Croma, Reliance Digital, Myntra, X/Twitter, LinkedIn, Instagram, Google Maps. Probe first with `obscura.js check <url>`; if `blocked`, escalate to Chrome with a copied profile.
-  - Anything else: try `ketch scrape` first (cheap, token-budgeted, no JS).
+  - Anything else: use `fetch_content` first. It handles HTML, PDFs, and GitHub. Page through or search long results with `get_search_content` and the returned `responseId`.
 
-Escalation rule: escalate on a detectable failure signal, not a guess. Re-fetch with Obscura when `ketch scrape` shows any of these: frontmatter `words:` near zero, output is only nav or boilerplate or a cookie banner, or the specific fact you came for is absent. Do not fall back to SERP snippets.
+Escalation rule: escalate on a detectable failure signal, not a guess. Re-fetch with Obscura when `fetch_content` shows any of these: an error (JS-rendered page, HTTP 403, incomplete content), output that is only nav or boilerplate or a cookie banner, or the specific fact you came for is absent. Do not fall back to search snippets.
 
 ## Subagent delegation
 

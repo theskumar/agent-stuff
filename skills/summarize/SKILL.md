@@ -1,6 +1,6 @@
 ---
 name: summarize
-description: "Convert a local file (PDF/DOCX/PPTX/HTML/etc.) into Markdown using `uvx markitdown`, optionally it can summarize. For URLs prefer the `ketch` skill (`ketch scrape`); use this only for local/office files or when ketch is unavailable."
+description: "Convert a local file (PDF/DOCX/PPTX/HTML/etc.) into Markdown using `uvx markitdown`, optionally it can summarize. For URLs prefer the agent's web fetch tool (`fetch_content` in pi, `WebFetch` in Claude Code); use this only for local/office files or when no fetch tool is available."
 ---
 
 Turn “things” (URLs, PDFs, Word docs, PowerPoints, HTML pages, text files, etc.) into **Markdown** so they can be inspected/quoted/processed like normal text.
@@ -13,7 +13,7 @@ For PDF inputs, use the `markitdown[pdf]` extra (or the wrapper below, which now
 Use this skill when you need to:
 - convert binary docs (PDF/DOCX/PPTX) into Markdown for analysis
 - quickly produce a short summary of a long document before deeper work
-- pull down a web page as Markdown **only when `ketch` is unavailable** — otherwise `ketch scrape <url>` is the preferred URL path (readability extraction, cache, JS-rendering fallback)
+- pull down a web page as Markdown **only when no web fetch tool is available**. Otherwise use `fetch_content` (pi) or `WebFetch` (Claude Code)
 
 ## Quick usage
 

@@ -151,7 +151,7 @@ Use it when:
 
 Do not use it when:
 - a known flow fits `ax.js` in one codemode script (faster, no inner model);
-- you only need to read a public page (`obscura.js content`, `ketch scrape`);
+- you only need to read a public page (`obscura.js content`, `fetch_content`);
 - the page needs a login you have not copied (`--attach` after `start.js --profile`).
 
 Behavior:
