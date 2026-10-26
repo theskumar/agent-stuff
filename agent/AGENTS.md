@@ -21,12 +21,15 @@ Escalation rule: escalate on a detectable failure signal, not a guess. Re-fetch 
 
 ## Subagent delegation
 
-Applies only when a `subagent` tool is available; ignore otherwise.
+Applies when `agent_spawn` or `subagent` is available. Use the tool's actual schema.
 
-- Delegate self-contained, token-heavy work to keep your own context small: multi-file codebase recon, implementation plans, executing an approved plan, code review.
-- Calls are serialized — one child at a time. Prefer several small delegations over asking one child to orchestrate other children.
-- Spell the task out in full; the child inherits no conversation history, only the task text.
-- Do not delegate trivial lookups that a single read or grep answers; subprocess overhead outweighs the benefit.
+- Keep planning, approvals, and user conversation in the main thread. Delegate bounded research, implementation, and review tasks.
+- With `agent_spawn`, discover types with `agent_types`. Use `/root/task` for inherited context and `/task` for fresh context. Include all needed instructions in fresh-context tasks.
+- Children do not automatically load global instructions or skills. Include the applicable rules, required skill paths, file ownership, and acceptance checks in each task.
+- Start with one child. Run independent tasks in parallel only when they cannot modify the same files or compete for ports. Respect configured depth and concurrency limits.
+- With the legacy `subagent` tool, use one child at a time and spell out the complete task. Do not assume inherited history.
+- For work in another repository, keep a durable handoff note and start a separate session there. Same-directory child agents do not replace project handoffs.
+- Do not delegate trivial lookups that one read or grep answers.
 
 The `technical-writing` skill above carries the full technical-text standard. When you cannot load it, hold the baseline in the Writing section, plus: imperative for steps, simple tenses, no should/would/may/might, one word per meaning, keep articles and "that", and keep code and identifiers exact.
 

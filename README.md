@@ -40,21 +40,8 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [-d] [prompt]` forks the current session into a new pi process in a new tmux window or herdr tab (backend auto-detected; `-d` keeps focus here) (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux/herdr) |
 | [`handoff.ts`](extensions/handoff.ts) | `/handoff <goal>` distills the session into a compact hot-state-first prompt and starts a fresh session seeded with it (`PI_HANDOFF_MODEL`, `PI_HANDOFF_MAX_TOKENS`; adapted from [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions), tuned for mid-task continuation) |
-| [`subagent.ts`](extensions/subagent.ts) | `subagent` tool: runs one delegated task at a time in an attachable `pi` child; auto-detects whether the parent runs under **herdr** (`HERDR_ENV`) or **tmux** and routes child panes through a shared backend. Under herdr the child runs in a non-disruptive background tab (`herdr agent attach <pane>` to view), exit is detected via `pane process-info`, and the pane auto-closes on settle. The live preview is built from the child's own session JSONL (latest reasoning/answer, current tool call, last result, tool-call count) instead of scraping the TUI, and herdr's native `agent_status` (working/blocked/done) shows in the header. tmux path unchanged: `pi --attach-subagent <id>` takes over the live session (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff); patched for a tmux-native setup — resolves real window/pane ids instead of assuming `:0.0`, puts children on the parent's own tmux server so attaching is a `switch-client` rather than a nested tmux, records each run's socket in `meta.json`, and reaps finished child sessions older than 2h) |
+| `npm:pi-subagent-manager` | Arnav Gupta’s hierarchical, steerable agent manager. Installed globally for trial; replaces the archived custom `subagent.ts`. See [trial notes](archive/subagents-2026-10-08/README.md). |
 | [`view-image.ts`](extensions/view-image.ts) | `view_image` tool reads an image file and returns it as an image attachment for visual inspection; reuses the built-in read tool's result renderer so pi's inline image viewer handles display (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
-
-## Agents
-
-Subagent definitions for the `subagents` extension. Source: [`agents/`](agents/), symlinked to `~/.pi/agent/agents/`. Frontmatter: `name`, `description`, `tools`, `model` (bare ids pinned to `claude-bridge`; use `provider/id` or `provider:` to override), `thinking`.
-
-| Agent | Model | Purpose |
-|---|---|---|
-| [`scout.md`](agents/scout.md) | haiku-4-5 | Fast codebase recon, compressed handoff context |
-| [`worker.md`](agents/worker.md) | sonnet-5 | General-purpose implementation, full tools |
-| [`reviewer.md`](agents/reviewer.md) | sonnet-5 | Read-only code review |
-| [`planner.md`](agents/planner.md) | opus-4-8 | Implementation plans (high thinking) |
-| [`oracle.md`](agents/oracle.md) | fable-5 | Long-horizon complex work and decisions; costly, use sparingly |
-| [`research-scout.md`](agents/research-scout.md) | gpt-5.6-luna | Read-only, cited evidence gathering for substantial research tracks |
 
 ## Global AGENTS.md
 
@@ -133,7 +120,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`summarize-url.md`](prompts/summarize-url.md) | Fetch and summarize URLs (including HN posts + comments) |
 | [`commit.md`](prompts/commit.md) | `/commit` slash command. Preloads `git status`/`diff`/`log` via `inline-bash` and delegates formatting to the `commit` skill |
 | [`go.md`](prompts/go.md) | `/go` execute prompt that nudges the agent to follow Explore → Plan → Clarify → Execute |
-| [`implement.md`](prompts/implement.md) | `/implement <task>` subagent chain: scout → planner → worker (pi-only, needs `subagents` extension) |
+| [`implement.md`](prompts/implement.md) | `/implement <task>` staged research, main-thread planning, implementation, and fresh-context review through `pi-subagent-manager` |
 
 ## Symlink targets
 

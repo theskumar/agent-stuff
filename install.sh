@@ -40,12 +40,6 @@ for ext in "$REPO_DIR"/extensions/*/; do
   link "${ext%/}" "$HOME/.pi/agent/extensions/$name"
 done
 
-echo "==> Agents → ~/.pi/agent/agents/"
-for agent in "$REPO_DIR"/agents/*.md; do
-  name="$(basename "$agent")"
-  link "$agent" "$HOME/.pi/agent/agents/$name"
-done
-
 echo "==> Prompts → ~/.pi/agent/prompts/"
 for prompt in "$REPO_DIR"/prompts/*.md; do
   name="$(basename "$prompt")"

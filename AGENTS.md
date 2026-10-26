@@ -17,9 +17,13 @@ This repo stores pi extensions, skills, and prompts. Everything is symlinked int
 
 ## Adding a new agent
 
-1. Place the `.md` file in `agents/` (frontmatter: `name`, `description`, optional `tools`, `model`, `provider`, `thinking`).
-2. Run `./install.sh` to symlink it to `~/.pi/agent/agents/`.
-3. Add a row in `README.md` under the Agents section.
+The `pi-subagent-manager` trial replaces the legacy agent loader. This repository stores no agent definitions.
+
+1. Use `/agents` to inspect and configure the manager's types.
+2. Store new definitions as regular files under `~/.pi/agent/subagent-manager/agents/`. The manager rejects symlinks.
+3. Use the manager's schema: `name`, `description`, optional `models`, `thinkingLevel`, and `tools.allow` or `tools.block`.
+
+See `archive/subagents-2026-10-08/README.md` for trial and rollback details.
 
 ## Adding a new prompt
 
