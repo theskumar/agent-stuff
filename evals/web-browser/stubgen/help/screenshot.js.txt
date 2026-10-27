@@ -1,0 +1,7 @@
+Usage: screenshot.js [--full-page] [--device <preset>] [--landscape]
+
+Examples:
+  screenshot.js
+  screenshot.js --full-page
+  screenshot.js --device iphone-14
+  screenshot.js --device pixel-7 --full-page

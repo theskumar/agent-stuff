@@ -1,0 +1,77 @@
+[
+ {
+  "id": "new-adr",
+  "prompt": "Write an ADR for today's decision: we cache the product catalog in Redis instead of PostgreSQL materialized views.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "[ $(ls docs/decisions/0004-*.md 2>/dev/null | wc -l) -eq 1 ] && f=$(ls docs/decisions/0004-*.md) && grep -qiE \"^#+ *status|^status:|\\*\\*status\" \"$f\" && grep -qiE \"^#+ .*context\" \"$f\" && grep -qiE \"^#+ .*decision\" \"$f\" && grep -qiE \"^#+ .*consequences\" \"$f\" && grep -qi redis \"$f\" && grep -qiE \"materiali[sz]ed|postgres\" \"$f\" && grep -qiE \"negative|downside|drawback|\\bcons\\b|trade-?off|cost|risk|overhead|dependency|stale|complexity\" \"$f\" && [ $(wc -w < \"$f\") -le 1200 ] && grep -q \"0004\" docs/decisions/README.md && cmp -s docs/decisions/0001-record-architecture-decisions.md .git/eval/0001-record-architecture-decisions.md && cmp -s docs/decisions/0002-use-mongodb-for-user-profiles.md .git/eval/0002-use-mongodb-for-user-profiles.md && cmp -s docs/decisions/0003-rest-for-public-api.md .git/eval/0003-rest-for-public-api.md"
+ },
+ {
+  "id": "supersede",
+  "prompt": "We decided today to move user profiles out of MongoDB into PostgreSQL JSONB columns. Record it in the ADRs.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "[ $(ls docs/decisions/0004-*.md 2>/dev/null | wc -l) -eq 1 ] && f=$(ls docs/decisions/0004-*.md) && grep -qiE \"^#+ *status|^status:|\\*\\*status\" \"$f\" && grep -qiE \"^#+ .*context\" \"$f\" && grep -qiE \"^#+ .*decision\" \"$f\" && grep -qiE \"^#+ .*consequences\" \"$f\" && grep -q \"0002\" \"$f\" && sh /tmp/skill-diet-work/adr/fixtures/same-body.sh docs/decisions/0002-use-mongodb-for-user-profiles.md && grep -qiE \"supersed|deprecat\" docs/decisions/0002-use-mongodb-for-user-profiles.md && grep -q \"0004\" docs/decisions/README.md && grep \"0002-use\" docs/decisions/README.md | grep -qiE \"supersed|deprecat\""
+ },
+ {
+  "id": "edit-accepted",
+  "prompt": "ADR-0003 is out of date: we're switching the public API from REST to GraphQL. Take care of it.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "[ $(ls docs/decisions/0004-*.md 2>/dev/null | wc -l) -eq 1 ] && f=$(ls docs/decisions/0004-*.md) && grep -qi graphql \"$f\" && grep -q \"0003\" \"$f\" && sh /tmp/skill-diet-work/adr/fixtures/same-body.sh docs/decisions/0003-rest-for-public-api.md && grep -qiE \"supersed|deprecat\" docs/decisions/0003-rest-for-public-api.md"
+ },
+ {
+  "id": "skip-trivial",
+  "prompt": "Do we need an ADR for bumping lodash from 4.17.20 to 4.17.21 to pick up a security patch? Answer briefly.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "must": [
+   "(^|\\n)\\W*(probably )?not?\\b|not (needed|necessary|warranted)|n.t (need|warrant|require)|skip|no ADR"
+  ],
+  "check": "[ $(ls docs/decisions | wc -l) -eq 5 ]"
+ },
+ {
+  "id": "rejected",
+  "prompt": "We spent two weeks evaluating a move from Heroku to Kubernetes and decided not to do it: too much ops work for a 3-person team. Record that.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "[ $(ls docs/decisions/0004-*.md 2>/dev/null | wc -l) -eq 1 ] && f=$(ls docs/decisions/0004-*.md) && grep -qiE \"^#+ *status|^status:|\\*\\*status\" \"$f\" && grep -qiE \"^#+ .*context\" \"$f\" && grep -qiE \"^#+ .*decision\" \"$f\" && grep -qiE \"^#+ .*consequences\" \"$f\" && grep -qi kubernetes \"$f\" && grep -qi heroku \"$f\" && grep -qiE \"ops|operat\" \"$f\" && grep -q \"0004\" docs/decisions/README.md"
+ },
+ {
+  "id": "y-statement",
+  "prompt": "Give me a Y-statement ADR for choosing Kong as our API gateway over AWS API Gateway; we accept running Kong ourselves. Print it only, write no files.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "must": [
+   "in the context of",
+   "facing",
+   "kong",
+   "aws api gateway",
+   "accepting"
+  ],
+  "check": "[ -z \"$(git status --porcelain)\" ]"
+ },
+ {
+  "id": "adr-tools",
+  "prompt": "Use adr-tools to record that we are replacing the cron background jobs with a Celery worker queue. It supersedes ADR 2. Fill in the content too.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh tools >/dev/null",
+  "check": "grep -qE \"new .*-s +2|new -s2\" .git/adr-calls.log && f=$(ls doc/architecture/decisions/0003-*.md) && grep -qi celery \"$f\" && ! grep -q \"The issue motivating this decision\" \"$f\" && grep -qiE \"supersed|superced\" doc/architecture/decisions/0002-*.md"
+ },
+ {
+  "id": "fix-index",
+  "prompt": "The ADR index in docs/decisions/README.md is out of date. Fix it.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh stale >/dev/null",
+  "check": "r=docs/decisions/README.md; for n in 0001 0002 0003 0004 0005 0006; do grep -q \"$n-\" $r || exit 1; done; grep \"0002-\" $r | grep -qiE \"supersed|deprecat\" && grep \"0005-\" $r | grep -qi proposed && grep \"0006-\" $r | grep -qi accepted && grep \"0004-\" $r | grep -qi accepted"
+ },
+ {
+  "id": "review",
+  "prompt": "Review docs/decisions/0004-use-kafka.md before I open the PR. List what's missing. Don't edit the file.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh weak >/dev/null",
+  "must": [
+   "option|alternative",
+   "negative|downside|drawback|cons\\b|trade-?off",
+   "context"
+  ],
+  "check": "cmp -s docs/decisions/0004-use-kafka.md .git/eval/0004-use-kafka.md"
+ },
+ {
+  "id": "draft-notes",
+  "prompt": "Draft an ADR from notes/sandbox-provider.md. Keep it practical.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh notes >/dev/null",
+  "check": "[ $(ls docs/decisions/0001-*.md 2>/dev/null | wc -l) -eq 1 ] && f=$(ls docs/decisions/0001-*.md) && grep -qiE \"^#+ *status|^status:|\\*\\*status\" \"$f\" && grep -qiE \"^#+ .*context\" \"$f\" && grep -qiE \"^#+ .*(decision|proposal)\" \"$f\" && grep -qiE \"^#+ .*consequences\" \"$f\" && grep -qi firecracker \"$f\" && grep -qi e2b \"$f\" && grep -qi proposed \"$f\" && grep -qiE \"negative|downside|drawback|\\bcons\\b|trade-?off|cost|risk|overhead|dependency|stale|complexity\" \"$f\" && [ $(wc -w < \"$f\") -le 1200 ]"
+ }
+]

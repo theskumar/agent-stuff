@@ -1,0 +1,57 @@
+[
+ {
+  "id": "eval-multi",
+  "prompt": "In the agent Chrome, click the first button on the current page and return the page title afterwards, in a single eval.js call. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "eval\\.js[^\\n]*click\\(\\)[^\\n]*title"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ },
+ {
+  "id": "chrome-profile",
+  "prompt": "Open https://github.com/notifications logged in with my Chrome profile named Work, not my default profile. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "--list-profiles",
+   "start\\.js[^\\n]*--profile[^\\n]*--chrome-profile|start\\.js[^\\n]*--chrome-profile[^\\n]*--profile"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ },
+ {
+  "id": "cookies-reject",
+  "prompt": "The agent Chrome shows https://www.bbc.com with a cookie consent banner. Reject non-essential cookies, then read the top headline. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "dismiss-cookies\\.js[^\\n]*--reject"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ },
+ {
+  "id": "obscura-proxy",
+  "prompt": "Fetch the readable text of the public page https://example.com through my SOCKS5 proxy at 127.0.0.1:1080, with a 60 second timeout. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "obscura\\.js\\s+content\\s+\\S*example\\.com[^\\n]*--proxy\\s+socks5://127\\.0\\.0\\.1:1080",
+   "obscura\\.js[^\\n]*--timeout\\s+60"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ },
+ {
+  "id": "live-chrome",
+  "prompt": "Skip any profile copy: attach straight to my everyday Chrome window that is already open, and read the page I have there. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "(can.?t|cannot|won.?t|doesn.?t|not)[^\\n]{0,80}(attach|drive)[^\\n]{0,60}(everyday|live|your|directly)"
+  ],
+  "must_not": [
+   "remote-debugging-port",
+   "(eval|ax|nav|content)\\.js"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ },
+ {
+  "id": "custom-port",
+  "prompt": "Port 9222 on this machine is taken by another app. Start the agent Chrome anyway and open https://example.com in it. This is an eval sandbox with no browser: do not start Chrome or run browser commands. The skill's scripts are also copied to ./browser-scripts/ (each prints its usage with --help). Reply with the exact commands you would run, in order, in one ```bash block, then one short line on anything you would tell me.",
+  "must": [
+   "BROWSER_DEBUG_PORT=\\d+",
+   "nav\\.js[^\\n]*example\\.com"
+  ],
+  "setup": "cp -R /tmp/skill-diet-work/web-browser/eval/stub-scripts ./browser-scripts"
+ }
+]

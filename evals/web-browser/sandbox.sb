@@ -1,0 +1,21 @@
+(version 1)
+(allow default)
+; Hide every other copy of the skill, session logs and the user's Chrome profile.
+(deny file-read* file-write*
+  (subpath "/Users/theskumar/.agents")
+  (subpath "/Users/theskumar/.pi/agent/skills")
+  (subpath "/Users/theskumar/.pi/agent/sessions")
+  (subpath "/Users/theskumar/.claude")
+  (subpath "/Users/theskumar/code/agent-stuff")
+  (subpath "/Users/theskumar/.cache/checkouts")
+  (subpath "/Users/theskumar/.cache/agent-web")
+  (subpath "/Users/theskumar/Library/Application Support/Google")
+  (subpath "/private/tmp/skill-diet-work"))
+(allow file-read* file-write* (subpath "/private/tmp/skill-diet-work/web-browser/eval"))
+(deny file-read* file-write* (literal "/private/tmp/skill-diet-work/web-browser/eval/tasks.json") (literal "/private/tmp/skill-diet-work/web-browser/eval/make-tasks.py"))
+; No Chrome, no CDP port.
+(deny process-exec
+  (subpath "/Applications/Google Chrome.app")
+  (subpath "/Applications/Chromium.app")
+  (subpath "/Applications/Google Chrome Canary.app"))
+(deny network-outbound (remote tcp "localhost:9222") (remote tcp "localhost:9333"))

@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+// pi adapter for skill-diet eval: <skill-dir> <prompt> <out-dir> <work-dir>
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const [skillDir, prompt, outDir, workDir] = process.argv.slice(2);
+const model = process.env.EVAL_MODEL || "openai/gpt-6-luna";
+fs.mkdirSync(outDir, { recursive: true });
+const args = ["-p", "--mode", "json", "--no-session", "--no-extensions", "--no-skills", "--no-context-files",
+  "--no-prompt-templates", "--no-mcp", "--model", model];
+// "none" gets only the tool's own help: it learns the CLI exists, nothing more.
+let msg = skillDir ? prompt : prompt + "\n\n(The official Notion CLI `ntn` is installed and logged in. `ntn --help` documents it.)";
+let name = "";
+if (skillDir) {
+  name = path.basename(skillDir.replace(/\/+$/, ""));
+  args.push("--skill", skillDir);
+  msg = "/skill:" + name + " " + prompt; // user-only skills: load by name, as the user does
+}
+args.push("--", msg);
+const out = fs.openSync(path.join(outDir, "raw.jsonl"), "w");
+const err = fs.openSync(path.join(outDir, "stderr.txt"), "w");
+// Notion eval safety: the stub ntn that task setup writes to $TMPDIR/ntnstub-<work name>/bin comes first on PATH, and every real Notion or MCP endpoint
+// gets a fake token and a dead host, so no run can reach the real workspace.
+// A throwaway HOME hides installed skills (~/.agents, ~/.claude, ~/.pi/agent/skills); pi keeps only its login.
+const os = require("node:os");
+const realAgentDir = process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), ".pi", "agent");
+const home = fs.mkdtempSync(path.join(os.tmpdir(), "nd-home-"));
+const agentDir = path.join(home, ".pi", "agent");
+fs.mkdirSync(agentDir, { recursive: true });
+for (const f of ["auth.json", "models.json"]) {
+  if (fs.existsSync(path.join(realAgentDir, f))) fs.symlinkSync(path.join(realAgentDir, f), path.join(agentDir, f));
+}
+const cleanup = () => { try { fs.rmSync(home, { recursive: true, force: true }); } catch {} };
+const stubDir = path.join(os.tmpdir(), "ntnstub-" + path.basename(workDir));
+const env = {
+  ...process.env,
+  HOME: home,
+  PI_CODING_AGENT_DIR: agentDir,
+  PATH: path.join(stubDir, "bin") + ":" + process.env.PATH,
+  NOTION_API_TOKEN: "eval-fake-token",
+  NOTION_API_BASE_URL: "http://127.0.0.1:9",
+  NOTION_BASE_URL: "http://127.0.0.1:9",
+  NOTION_KEYRING: "0",
+  CLAUDE_CODE_OAUTH_TOKEN: "eval-fake-token",
+  ANTHROPIC_MCP_PROXY_URL: "http://127.0.0.1:9/v1/mcp",
+};
+// macOS sandbox: the agent reads nothing in the real home except what pi and ntn need, and no other skill copy
+// (installed skills, other eval versions, other eval dirs). Later rules win.
+const real = os.homedir();
+const q = (p) => JSON.stringify(p);
+const rule = (verb, p) => `(${verb} file-read-data (subpath ${q(p)}))`;
+let profile = "(version 1)(allow default)" +
+  rule("deny", real) +
+  rule("allow", path.join(real, ".local", "bin")) +
+  rule("allow", path.join(real, ".local", "share", "mise")) +
+  rule("allow", realAgentDir) +
+  rule("deny", path.join(realAgentDir, "skills")) +
+  rule("deny", path.join(realAgentDir, "sessions")) +
+  rule("deny", "/private/tmp/skill-diet-work");
+if (skillDir) profile += rule("allow", fs.realpathSync(skillDir));
+const child = spawn("sandbox-exec", ["-p", profile, "pi", ...args], { cwd: workDir, stdio: ["ignore", out, err], env });
+const kill = () => { try { child.kill("SIGTERM"); } catch {} };
+process.on("SIGTERM", () => { kill(); cleanup(); process.exit(143); });
+process.on("SIGINT", () => { kill(); cleanup(); process.exit(130); });
+child.on("close", () => {
+  cleanup();
+  const lines = fs.readFileSync(path.join(outDir, "raw.jsonl"), "utf8").split("\n").filter(Boolean);
+  let end = null;
+  for (const l of lines) { try { const e = JSON.parse(l); if (e.type === "agent_end") end = e; } catch {} }
+  if (!end) { console.error("no agent_end in output"); process.exit(1); }
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const calls = [];
+  if (skillDir) calls.push({ name: "read", path: path.join(skillDir, "SKILL.md") });
+  let turns = 0, answer = "";
+  for (const m of end.messages) {
+    if (m.role !== "assistant") continue;
+    turns++;
+    if (m.usage) for (const k of Object.keys(tokens)) tokens[k] += m.usage[k] || 0;
+    const content = Array.isArray(m.content) ? m.content : [];
+    const text = content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+    if (text) answer = text;
+    for (const c of content) {
+      if (c.type !== "toolCall") continue;
+      const a = c.arguments || {};
+      const call = { name: c.name };
+      if (a.path) call.path = path.isAbsolute(a.path) ? a.path : path.join(workDir, a.path);
+      if (a.command) call.command = a.command;
+      calls.push(call);
+    }
+  }
+  fs.writeFileSync(path.join(outDir, "result.json"), JSON.stringify({ answer, tokens, turns, calls }, null, 2));
+  // The task check runs in <work> after the session, so it can score the agent's commands too.
+  try { fs.writeFileSync(path.join(stubDir, "calls.json"), JSON.stringify({ answer, calls })); } catch {}
+  try { fs.copyFileSync(path.join(stubDir, "ntn-log.jsonl"), path.join(outDir, "ntn-log.jsonl")); } catch {}
+  process.exit(0);
+});

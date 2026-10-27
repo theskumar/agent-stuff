@@ -1,0 +1,9 @@
+Usage: emulate.js <device> [--landscape]
+       emulate.js --reset
+       emulate.js --list
+
+Examples:
+  emulate.js --list
+  emulate.js iphone-14
+  emulate.js pixel-7 --landscape
+  emulate.js --reset

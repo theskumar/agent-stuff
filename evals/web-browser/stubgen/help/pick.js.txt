@@ -1,0 +1,4 @@
+Usage: pick.js 'message'
+
+Example:
+  pick.js "Click the submit button"

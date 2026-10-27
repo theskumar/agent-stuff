@@ -1,0 +1,10 @@
+/**
+Cookie Consent Dismissal Helper
+
+Automatically accepts cookie consent dialogs on EU websites.
+Supports common CMPs: OneTrust, Cookiebot, Didomi, Quantcast, Google, BBC, Amazon, etc.
+
+Usage:
+  ./dismiss-cookies.js          # Accept cookies
+  ./dismiss-cookies.js --reject # Reject cookies (where possible)
+/

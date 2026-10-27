@@ -1,0 +1,6 @@
+Usage: eval.js 'code'
+
+Examples:
+  eval.js "document.title"
+  eval.js "document.querySelectorAll('a').length"
+  eval.js 'document.querySelector("button")?.click(); "clicked"'

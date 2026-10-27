@@ -1,0 +1,50 @@
+WARN before/add-section: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/add-section: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/create-from-file: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/db-query: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/read-page: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/read-page: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/set-status: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/set-status: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+WARN before/set-status: read /private/tmp/skill-diet-work/notion/scripts/notion.js from outside sk/before
+WARN before/sidebar: read /private/tmp/skill-diet-work/notion/sk/before/notion from outside sk/before
+FAIL before-upload-image-2  missing=[] banned=[] exit=0 check=false
+FAIL none-add-section-0  missing=[] banned=[] exit=0 check=false
+FAIL none-add-section-1  missing=[] banned=[] exit=0 check=false
+FAIL none-add-section-2  missing=[] banned=[] exit=0 check=false
+FAIL none-create-from-file-0  missing=[] banned=[] exit=0 check=false
+FAIL none-create-from-file-1  missing=[] banned=[] exit=0 check=false
+FAIL none-create-from-file-2  missing=[] banned=[] exit=0 check=false
+FAIL none-edit-line-0  missing=[] banned=[] exit=0 check=false
+FAIL none-edit-line-1  missing=[] banned=[] exit=0 check=false
+FAIL none-edit-line-2  missing=[] banned=[] exit=0 check=false
+FAIL none-set-status-2  missing=[] banned=[] exit=0 check=false
+FAIL none-sidebar-0  missing=[] banned=[] exit=0 check=false
+FAIL none-sidebar-1  missing=[] banned=[] exit=0 check=false
+FAIL none-sidebar-2  missing=[] banned=[] exit=0 check=false
+FAIL none-upload-image-0  missing=[] banned=[] exit=0 check=false
+FAIL none-upload-image-2  missing=[] banned=[] exit=0 check=false
+
+| version | success | tokens/run | turns/run | skill files read/run | wall s/run |
+|---|---|---|---|---|---|
+| before | 32/33 | 23,913 | 3.8 | 2.4 | 20 |
+| after | 33/33 | 10,861 | 2.6 | 1.9 | 12 |
+| none | 18/33 | 19,828 | 5.7 | 0.0 | 28 |
+
+tokens/run counts cache reads at full price: use it to compare versions, not to cost them.
+
+| task | before | after | none |
+|---|---|---|---|
+| read-page | 3/3 | 3/3 | 3/3 |
+| add-section | 3/3 | 3/3 | 0/3 |
+| edit-line | 3/3 | 3/3 | 0/3 |
+| create-private | 3/3 | 3/3 | 3/3 |
+| create-from-file | 3/3 | 3/3 | 0/3 |
+| db-query | 3/3 | 3/3 | 3/3 |
+| comment | 3/3 | 3/3 | 3/3 |
+| set-status | 3/3 | 3/3 | 2/3 |
+| search | 3/3 | 3/3 | 3/3 |
+| sidebar | 3/3 | 3/3 | 0/3 |
+| upload-image | 2/3 | 3/3 | 1/3 |
+before reads: {"SKILL.md":33,"scripts/notion.js":27,"scripts":12,"scripts/notion-mcp.mjs":6}
+after reads: {"SKILL.md":33,"scripts/notion.js":25,"scripts/notion-mcp.mjs":6}

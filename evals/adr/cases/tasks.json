@@ -1,0 +1,29 @@
+[
+ {
+  "id": "no-adrs-yet",
+  "prompt": "Write an ADR for choosing PostgreSQL over MySQL for the orders service.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh bare >/dev/null",
+  "check": "f=$(ls docs/adr/0001-*.md) && grep -qi postgres \"$f\" && grep -q \"0001\" docs/adr/README.md"
+ },
+ {
+  "id": "deprecate",
+  "prompt": "We shut down the public API completely last week, with no replacement. Update the ADRs.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "sh /tmp/skill-diet-work/adr/fixtures/same-body.sh docs/decisions/0003-rest-for-public-api.md && grep -qi deprecat docs/decisions/0003-rest-for-public-api.md && grep \"0003-\" docs/decisions/README.md | grep -qi deprecat"
+ },
+ {
+  "id": "impl-notes",
+  "prompt": "Write an ADR for moving our background email sending to AWS SES with a retry queue; we start building it next sprint.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh base >/dev/null",
+  "check": "f=$(ls docs/decisions/0004-*.md) && grep -qiE \"^#+ .*(implementation|next steps|rollout|plan|follow)\" \"$f\""
+ },
+ {
+  "id": "review-depth",
+  "prompt": "Review docs/decisions/0004-use-kafka.md before I open the PR. Don't edit the file.",
+  "setup": "sh /tmp/skill-diet-work/adr/fixtures/repo.sh weak >/dev/null",
+  "must": [
+   "secur|cost|revers|roll ?back|operat"
+  ],
+  "check": "cmp -s docs/decisions/0004-use-kafka.md .git/eval/0004-use-kafka.md"
+ }
+]

@@ -1,0 +1,4 @@
+iphone-se    375x667 @2x (iPhone SE)
+iphone-14    390x844 @3x (iPhone 14)
+pixel-7      412x915 @2.625x (Pixel 7)
+galaxy-s20   360x800 @3x (Galaxy S20)

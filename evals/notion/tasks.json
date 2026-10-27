@@ -1,0 +1,71 @@
+[
+  {
+    "id": "read-page",
+    "prompt": "Summarize the Notion page https://www.notion.so/acme/Q3-Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9 in two sentences.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs read-page",
+    "must": [
+      "Nov(ember)?\\.? 14"
+    ]
+  },
+  {
+    "id": "add-section",
+    "prompt": "Add a section to the end of the Notion page https://www.notion.so/acme/Q3-Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9: a heading 'Risks' with one bullet 'Vendor delay'. Keep everything else on the page as it is.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs add-section"
+  },
+  {
+    "id": "edit-line",
+    "prompt": "On the Notion page https://www.notion.so/acme/Q3-Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9, change 'Owner: TBD' to 'Owner: Priya'. Leave the rest of the page alone.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs edit-line"
+  },
+  {
+    "id": "create-private",
+    "prompt": "Create a private Notion page titled 'Retro 2026-10-27' with two to-do items: 'Book room' and 'Send invite'. Give me its link.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs create-private"
+  },
+  {
+    "id": "create-from-file",
+    "prompt": "Create a Notion page from ./notes.md under the page https://www.notion.so/acme/Projects-6f708192a3b44c5d8e6f708192a3b4c5. The warning in the file must show up as a Notion callout.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs create-from-file"
+  },
+  {
+    "id": "db-query",
+    "prompt": "Which tasks in the Notion database https://www.notion.so/acme/3c4d5e6f7a8b49c0a1b2c3d4e5f60718?v=1f2e3d4c have Status 'Blocked'? List their names.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs db-query"
+  },
+  {
+    "id": "comment",
+    "prompt": "Add a comment to the Notion page https://www.notion.so/acme/Q3-Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9 that says: Looks good, **ship it**.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs comment"
+  },
+  {
+    "id": "set-status",
+    "prompt": "Mark the Notion task https://www.notion.so/acme/Fix-login-bug-5e6f708192a34b4c9d5e6f708192a3b4 as Done.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs set-status"
+  },
+  {
+    "id": "search",
+    "prompt": "Find my Notion pages about 'Q3 revenue plan' and give me their links.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs search"
+  },
+  {
+    "id": "sidebar",
+    "prompt": "List the pages in my Notion sidebar's Recent section.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs sidebar"
+  },
+  {
+    "id": "upload-image",
+    "prompt": "Upload ./diagram.png to Notion and add it as an image at the end of the page https://www.notion.so/acme/Q3-Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9.",
+    "setup": "sh /tmp/skill-diet-work/notion/fixtures/setup.sh",
+    "check": "node /tmp/skill-diet-work/notion/checks/check.mjs upload-image"
+  }
+]

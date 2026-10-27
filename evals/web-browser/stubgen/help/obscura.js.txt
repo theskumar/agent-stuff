@@ -1,0 +1,25 @@
+Usage: obscura.js <command> [args]
+
+Anonymous, no-login scraping via the Obscura headless engine.
+
+Commands:
+  content <url> [flags]     Readable page text            (fetch --dump text)
+  html <url> [flags]        Rendered HTML                 (fetch --dump html)
+  links <url> [flags]       All links as JSON             (fetch --dump links)
+  cookies <url> [flags]     Cookie jar as JSON            (fetch --dump cookies)
+  eval <url> <js> [flags]   Run JS, print result          (fetch --eval)
+  shot <url> [out.png]      Screenshot to file            (fetch --screenshot)
+  check <url>               Report {title, blocked?}      (probe an anti-bot)
+  scrape <url...> [flags]   Parallel multi-URL scrape     (scrape)
+  serve [--port N]          Start CDP server (Puppeteer/Playwright client)
+  install [--force]         (Re)install the stealth binary
+  -- <raw obscura args>     Passthrough to the obscura CLI
+
+Default flags added to fetch commands: --wait-until networkidle0 --timeout 30
+Append your own flags to override (e.g. --timeout 60 --proxy socks5://...).
+
+When to use what:
+  no login needed          -> obscura.js (this)
+  YOUR logged-in session   -> ./start.js --profile  + nav.js/eval.js/...
+  hard anti-bot (Klook...) -> ./start.js --profile  (obscura hits the challenge)
+

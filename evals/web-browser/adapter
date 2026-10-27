@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+// pi adapter for skill-diet eval: <skill-dir> <prompt> <out-dir> <work-dir>
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const [skillDir, prompt, outDir, workDir] = process.argv.slice(2);
+const model = process.env.EVAL_MODEL || "openai/gpt-6-luna";
+fs.mkdirSync(outDir, { recursive: true });
+const args = ["-p", "--mode", "json", "--no-session", "--no-extensions", "--no-skills", "--no-context-files",
+  "--no-prompt-templates", "--no-mcp", "--model", model];
+let msg = prompt;
+let name = "";
+if (skillDir) {
+  name = path.basename(skillDir.replace(/\/+$/, ""));
+  args.push("--skill", skillDir);
+  msg = "/skill:" + name + " " + prompt; // user-only skills: load by name, as the user does
+}
+args.push("--", msg);
+const out = fs.openSync(path.join(outDir, "raw.jsonl"), "w");
+const err = fs.openSync(path.join(outDir, "stderr.txt"), "w");
+// Sandbox: hide installed skills, session logs and the skill repo; block Chrome and CDP ports.
+const sb = path.join(__dirname, "sandbox.sb");
+const child = spawn("sandbox-exec", ["-f", sb, "pi", ...args], { cwd: workDir, stdio: ["ignore", out, err], env: process.env });
+const kill = () => { try { child.kill("SIGTERM"); } catch {} };
+process.on("SIGTERM", () => { kill(); process.exit(143); });
+process.on("SIGINT", () => { kill(); process.exit(130); });
+child.on("close", () => {
+  const lines = fs.readFileSync(path.join(outDir, "raw.jsonl"), "utf8").split("\n").filter(Boolean);
+  let end = null;
+  for (const l of lines) { try { const e = JSON.parse(l); if (e.type === "agent_end") end = e; } catch {} }
+  if (!end) { console.error("no agent_end in output"); process.exit(1); }
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const calls = [];
+  if (skillDir) calls.push({ name: "read", path: path.join(skillDir, "SKILL.md") });
+  let turns = 0, answer = "";
+  for (const m of end.messages) {
+    if (m.role !== "assistant") continue;
+    turns++;
+    if (m.usage) for (const k of Object.keys(tokens)) tokens[k] += m.usage[k] || 0;
+    const content = Array.isArray(m.content) ? m.content : [];
+    const text = content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+    if (text) answer = text;
+    for (const c of content) {
+      if (c.type !== "toolCall") continue;
+      const a = c.arguments || {};
+      const call = { name: c.name };
+      if (a.path) call.path = path.isAbsolute(a.path) ? a.path : path.join(workDir, a.path);
+      if (a.command) call.command = a.command;
+      calls.push(call);
+    }
+  }
+  fs.writeFileSync(path.join(outDir, "result.json"), JSON.stringify({ answer, tokens, turns, calls }, null, 2));
+  process.exit(0);
+});

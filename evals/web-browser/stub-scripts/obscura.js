@@ -1,0 +1,9 @@
+#!/usr/bin/env node
+// eval sandbox stub of web-browser/scripts/obscura.js: there is no browser here.
+const HELP = "Usage: obscura.js <command> [args]\n\nAnonymous, no-login scraping via the Obscura headless engine.\n\nCommands:\n  content <url> [flags]     Readable page text            (fetch --dump text)\n  html <url> [flags]        Rendered HTML                 (fetch --dump html)\n  links <url> [flags]       All links as JSON             (fetch --dump links)\n  cookies <url> [flags]     Cookie jar as JSON            (fetch --dump cookies)\n  eval <url> <js> [flags]   Run JS, print result          (fetch --eval)\n  shot <url> [out.png]      Screenshot to file            (fetch --screenshot)\n  check <url>               Report {title, blocked?}      (probe an anti-bot)\n  scrape <url...> [flags]   Parallel multi-URL scrape     (scrape)\n  serve [--port N]          Start CDP server (Puppeteer/Playwright client)\n  install [--force]         (Re)install the stealth binary\n  -- <raw obscura args>     Passthrough to the obscura CLI\n\nDefault flags added to fetch commands: --wait-until networkidle0 --timeout 30\nAppend your own flags to override (e.g. --timeout 60 --proxy socks5://...).\n\nWhen to use what:\n  no login needed          -> obscura.js (this)\n  YOUR logged-in session   -> ./start.js --profile  + nav.js/eval.js/...\n  hard anti-bot (Klook...) -> ./start.js --profile  (obscura hits the challenge)\n\n";
+const LIST = null;
+const a = process.argv.slice(2);
+if (LIST && a.includes("--list")) { process.stdout.write(LIST); process.exit(0); }
+if (HELP && (a.length === 0 || a.includes("--help") || a.includes("-h"))) { process.stdout.write(HELP); process.exit(a.length ? 0 : 0); }
+console.error("✗ eval sandbox: no browser or network here, so obscura.js did not run. Reply with the commands you would run instead.");
+process.exit(1);

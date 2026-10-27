@@ -1,0 +1,18 @@
+
+| version | success | tokens/run | turns/run | skill files read/run | wall s/run |
+|---|---|---|---|---|---|
+| before | 6/6 | 9,973 | 1.5 | 1.0 | 31 |
+| after | 18/18 | 7,500 | 1.8 | 1.0 | 28 |
+
+tokens/run counts cache reads at full price: use it to compare versions, not to cost them.
+
+| task | before | after |
+|---|---|---|
+| eval-multi | 0/0 | 3/3 |
+| chrome-profile | 3/3 | 3/3 |
+| cookies-reject | 0/0 | 3/3 |
+| obscura-proxy | 0/0 | 3/3 |
+| live-chrome | 3/3 | 3/3 |
+| custom-port | 0/0 | 3/3 |
+before reads: {"SKILL.md":6}
+after reads: {"SKILL.md":18}

@@ -1,0 +1,5 @@
+Usage: nav.js <url> [--new]
+
+Examples:
+  nav.js https://example.com       # Navigate current tab
+  nav.js https://example.com --new # Open in new tab

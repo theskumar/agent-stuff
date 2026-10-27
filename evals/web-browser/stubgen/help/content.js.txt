@@ -1,0 +1,3 @@
+Usage: content.js <url>
+
+Extract readable content from a page as markdown.

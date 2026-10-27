@@ -1,0 +1,17 @@
+✗ Unknown option(s): --help
+Usage: start.js [--profile] [--chrome-profile <name>] [--reset-profile] [--no-stealth] [--list-profiles]
+
+Options:
+  --profile           Copy your Chrome profile (logins/cookies) into an isolated cache
+  --chrome-profile <n> Which source Chrome profile dir to copy (default: Default)
+  --list-profiles     List your Chrome profiles (dir → display name) and exit
+  --reset-profile     Clear the cached copy before launch (forces a fresh copy)
+  --no-stealth        Opt out of stealth (adds the automation banner; alias --automation)
+  --stealth           Accepted, no-op (stealth is the default)
+
+Examples:
+  start.js
+  start.js --profile
+  start.js --list-profiles
+  start.js --profile --chrome-profile 'Profile 1'
+  start.js --no-stealth

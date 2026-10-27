@@ -122,6 +122,10 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`go.md`](prompts/go.md) | `/go` execute prompt that nudges the agent to follow Explore → Plan → Clarify → Execute |
 | [`implement.md`](prompts/implement.md) | `/implement <task>` staged research, main-thread planning, implementation, and fresh-context review through `pi-subagent-manager` |
 
+## Evals
+
+Before/after skill-diet eval kits for `adr`, `notion` and `web-browser`. Source: [`evals/`](evals/).
+
 ## Symlink targets
 
 | Source | Target |

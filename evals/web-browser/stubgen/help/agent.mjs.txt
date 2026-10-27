@@ -1,0 +1,27 @@
+Delegate a whole web task to a cheap inner agent (browser-use-pi SDK).
+The calling agent sends one task string and gets a short result back; page content,
+accessibility trees and screenshots stay inside the inner loop and never reach the outer context.
+
+  agent.mjs "<task>" [options]
+
+Models (tried in order; a tier is skipped when it errors before producing any output):
+  1. openai/gpt-6-luna                  ChatGPT subscription via pi's auth.json (OAuth, refreshed by pi's own store)
+  2. openrouter/openai/gpt-6-luna       OpenRouter API key from pi's auth.json
+  3. openrouter/openrouter/free         free router, slow (1-2 min) and rate-limited, prompts may be logged
+
+Options:
+  --model <provider/id>   pin one model, no fallback
+  --free                  use only the free router
+  --hard                  reasoning xhigh, 80 steps, 15 min, $2 cap (hard multi-page tasks)
+  --reasoning <level>     minimal|low|medium|high|xhigh (default low)
+  --domains a.com,*.b.com allow-list of hostnames; everything else is blocked
+  --attach                use the skill's Chrome on :9222 (shares its logins) instead of an isolated one
+  --profile-dir <dir>     persistent isolated Chrome profile (sign in once with --headed)
+  --headed                show the browser window
+  --max-steps N  --timeout SECONDS  --max-cost USD  --workspace DIR
+  --verbose               stream the inner agent's log to stderr
+  --json                  print the full result as JSON
+
+Safety: the inner agent runs generated JavaScript with file and network access on this machine.
+Page content is untrusted. Use --domains for unknown sites; do not pass --attach or --profile-dir
+on hostile pages.
