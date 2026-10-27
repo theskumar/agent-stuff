@@ -6,6 +6,13 @@ import { join } from "node:path";
 
 const LOG_ROOT = join(homedir(), ".cache/agent-web/logs");
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: net-summary.js [--file <path>]");
+  console.log("\nCounts requests, responses by status, and failed requests in the newest watch.js log.");
+  console.log("  --file <path>  read this log instead of the newest one");
+  process.exit(0);
+}
+
 function statSafe(path) {
   try {
     return statSync(path);

@@ -1,20 +1,46 @@
 #!/usr/bin/env node
 
-import { connect } from "./cdp.js";
+import { connect, takeTabArg } from "./cdp.js";
 import { applyActiveEmulation } from "./emulation-state.js";
 import { applyStealthPatches } from "./stealth.js";
 
 const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
 
-const url = process.argv[2];
-const newTab = process.argv[3] === "--new";
-
-if (!url) {
-  console.log("Usage: nav.js <url> [--new]");
+function printUsage() {
+  console.log("Usage: nav.js <url> [--new | --tab <url-substring>]");
   console.log("\nExamples:");
-  console.log("  nav.js https://example.com       # Navigate current tab");
-  console.log("  nav.js https://example.com --new # Open in new tab");
+  console.log("  nav.js https://example.com                 # Navigate the last tab");
+  console.log("  nav.js https://example.com --new           # Open in a new tab");
+  console.log("  nav.js https://example.com --tab github.com # Navigate the tab whose URL contains github.com");
+}
+
+let tabMatch, args;
+try {
+  ({ tab: tabMatch, args } = takeTabArg(process.argv.slice(2)));
+} catch (e) {
+  console.error("✗", e.message);
+  process.exit(1);
+}
+if (args.includes("--help") || args.includes("-h")) {
+  printUsage();
+  process.exit(0);
+}
+const newTab = args.includes("--new");
+const unknown = args.filter((a) => a.startsWith("--") && a !== "--new");
+const [url, ...extra] = args.filter((a) => !a.startsWith("--"));
+
+if (unknown.length || extra.length) {
+  console.error(`✗ Unknown argument(s): ${[...unknown, ...extra].join(" ")}`);
+  printUsage();
+  process.exit(1);
+}
+if (newTab && tabMatch) {
+  console.error("✗ Pass --new or --tab, not both");
+  process.exit(1);
+}
+if (!url) {
+  printUsage();
   process.exit(1);
 }
 
@@ -38,12 +64,7 @@ try {
     });
     targetId = newTargetId;
   } else {
-    const pages = await cdp.getPages();
-    const page = pages.at(-1);
-    if (!page) {
-      console.error("✗ No active tab found");
-      process.exit(1);
-    }
+    const page = await cdp.pickPage(tabMatch);
     targetId = page.targetId;
   }
 

@@ -17,6 +17,13 @@ import { applyActiveEmulation } from "./emulation-state.js";
 const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: dismiss-cookies.js [--reject]");
+  console.log("\nClicks the cookie banner's accept button on the last tab (--reject: its reject button).");
+  console.log("Knows OneTrust, Cookiebot, Didomi, Quantcast, Usercentrics, TrustArc, Google, Amazon and generic banners.");
+  process.exit(0);
+}
+
 const reject = process.argv.includes("--reject");
 const mode = reject ? "reject" : "accept";
 
@@ -300,13 +307,7 @@ try {
   const cdp = await connect(5000);
 
   log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
-
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+  const page = await cdp.pickPage();
 
   log("attaching to page...");
   const sessionId = await cdp.attachToPage(page.targetId);

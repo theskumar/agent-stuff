@@ -6,6 +6,14 @@ import { join } from "node:path";
 
 const LOG_ROOT = join(homedir(), ".cache/agent-web/logs");
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: logs-tail.js [--file <path>] [--follow]");
+  console.log("\nPrints the newest watch.js log (JSON lines: console, exception, network events).");
+  console.log("  --file <path>  read this log instead of the newest one");
+  console.log("  --follow       keep printing new lines");
+  process.exit(0);
+}
+
 function findLatestFile() {
   if (!existsSync(LOG_ROOT)) return null;
   const dirs = readdirSync(LOG_ROOT)

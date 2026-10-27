@@ -7,11 +7,12 @@ const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
 
 const message = process.argv.slice(2).join(" ");
-if (!message) {
+const help = message === "--help" || message === "-h";
+if (!message || help) {
   console.log("Usage: pick.js 'message'");
   console.log("\nExample:");
   console.log('  pick.js "Click the submit button"');
-  process.exit(1);
+  process.exit(help ? 0 : 1);
 }
 
 // Global timeout - 5 minutes for interactive picking
@@ -123,13 +124,7 @@ try {
   const cdp = await connect(5000);
 
   log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
-
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+  const page = await cdp.pickPage();
 
   log("attaching to page...");
   const sessionId = await cdp.attachToPage(page.targetId);

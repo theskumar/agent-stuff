@@ -40,12 +40,13 @@ const stealth = !(flags.has("--no-stealth") || flags.has("--automation"));
 
 function printUsage() {
   console.log(
-    "Usage: start.js [--profile] [--chrome-profile <name>] [--reset-profile] [--no-stealth] [--list-profiles]",
+    "Usage: start.js [--profile] [--chrome-profile <name>] [--reset-profile] [--no-stealth] [--list-profiles] [--stop]",
   );
   console.log("\nOptions:");
   console.log("  --profile           Copy your Chrome profile (logins/cookies) into an isolated cache");
   console.log("  --chrome-profile <n> Which source Chrome profile dir to copy (default: Default)");
   console.log("  --list-profiles     List your Chrome profiles (dir → display name) and exit");
+  console.log("  --stop              Quit the Chrome that start.js launched on this port and exit");
   console.log("  --reset-profile     Clear the cached copy before launch (forces a fresh copy)");
   console.log("  --no-stealth        Opt out of stealth (adds the automation banner; alias --automation)");
   console.log("  --stealth           Accepted, no-op (stealth is the default)");
@@ -55,6 +56,13 @@ function printUsage() {
   console.log("  start.js --list-profiles");
   console.log("  start.js --profile --chrome-profile 'Profile 1'");
   console.log("  start.js --no-stealth");
+  console.log("  start.js --stop");
+  console.log("\nEnvironment: BROWSER_DEBUG_PORT (default 9222), BROWSER_DEBUG_HOST, BROWSER_BIN");
+}
+
+if (flags.has("--help") || flags.has("-h")) {
+  printUsage();
+  process.exit(0);
 }
 
 const KNOWN_FLAGS = new Set([
@@ -63,6 +71,7 @@ const KNOWN_FLAGS = new Set([
   "--stealth",
   "--no-stealth",
   "--automation",
+  "--stop",
 ]);
 const unknownArgs = [...flags].filter((a) => !KNOWN_FLAGS.has(a));
 if (unknownArgs.length > 0) {
@@ -171,6 +180,36 @@ function resolveChromeBinary() {
 
 ensureDir(BROWSER_ROOT);
 
+if (flags.has("--stop")) {
+  const running = readState();
+  if (!running?.pid || !isProcessAlive(running.pid)) {
+    clearState();
+    console.log("✓ No Chrome started by start.js is running");
+    process.exit(0);
+  }
+  if (running.port !== DEBUG_PORT) {
+    console.error(
+      `✗ start.js's Chrome runs on :${running.port}, not :${DEBUG_PORT}. Rerun with BROWSER_DEBUG_PORT=${running.port}`,
+    );
+    process.exit(1);
+  }
+  try {
+    process.kill(running.pid, "SIGTERM");
+  } catch (e) {
+    console.error(`✗ Could not stop Chrome (pid ${running.pid}): ${e.message}`);
+    process.exit(1);
+  }
+  for (let i = 0; i < 20 && isProcessAlive(running.pid); i++) {
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (isProcessAlive(running.pid)) {
+    process.kill(running.pid, "SIGKILL");
+  }
+  clearState();
+  console.log(`✓ Stopped Chrome on :${DEBUG_PORT} (pid ${running.pid})`);
+  process.exit(0);
+}
+
 if (listProfiles) {
   const profiles = listChromeProfiles();
   if (!profiles.length) {
@@ -215,7 +254,7 @@ if (await isDebugEndpointUp()) {
     console.error(
       `✗ Chrome already running on :${DEBUG_PORT} in ${runningState.mode} mode`,
     );
-    console.error("  Close it first before switching browser profile modes.");
+    console.error("  Run start.js --stop first, then start it again in the new mode.");
     process.exit(1);
   }
 

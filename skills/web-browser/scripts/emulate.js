@@ -26,11 +26,11 @@ for (let i = 0; i < args.length; i++) {
   if (arg === "--landscape" || arg === "--reset" || arg === "--list") {
     continue;
   }
-  if (arg.startsWith("--")) {
+  if (arg.startsWith("-")) {
     console.log("Usage: emulate.js <device> [--landscape]");
     console.log("       emulate.js --reset");
     console.log("       emulate.js --list");
-    process.exit(1);
+    process.exit(arg === "--help" || arg === "-h" ? 0 : 1);
   }
   if (deviceName) {
     console.error("✗ Only one device preset can be provided");
@@ -87,13 +87,7 @@ try {
   const cdp = await connect(5000);
 
   log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
-
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+  const page = await cdp.pickPage();
 
   log("attaching to page...");
   const sessionId = await cdp.attachToPage(page.targetId);

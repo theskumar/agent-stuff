@@ -16,7 +16,7 @@ const DEBUG = process.env.DEBUG === "1";
 const log = DEBUG ? (...args) => console.error("[debug]", ...args) : () => {};
 
 function printUsage() {
-  console.log("Usage: screenshot.js [--full-page] [--device <preset>] [--landscape]");
+  console.log("Usage: screenshot.js [--full-page] [--device <preset> [--landscape]] [--tab <url-substring>]");
   console.log("\nExamples:");
   console.log("  screenshot.js");
   console.log("  screenshot.js --full-page");
@@ -28,6 +28,7 @@ const args = process.argv.slice(2);
 let fullPage = false;
 let landscape = false;
 let deviceName = null;
+let tabMatch = null;
 
 for (let i = 0; i < args.length; i++) {
   const arg = args[i];
@@ -50,6 +51,18 @@ for (let i = 0; i < args.length; i++) {
       process.exit(1);
     }
     deviceName = value;
+    i += 1;
+    continue;
+  }
+
+  if (arg === "--tab") {
+    const value = args[i + 1];
+    if (!value || value.startsWith("--")) {
+      console.error("✗ --tab requires a URL substring");
+      printUsage();
+      process.exit(1);
+    }
+    tabMatch = value;
     i += 1;
     continue;
   }
@@ -93,13 +106,7 @@ try {
   cdp = await connect(5000);
 
   log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
-
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+  const page = await cdp.pickPage(tabMatch);
 
   log("attaching to page...");
   const sessionId = await cdp.attachToPage(page.targetId);

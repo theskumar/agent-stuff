@@ -38,6 +38,7 @@ const argv = process.argv.slice(2);
 const opt = {};
 const positional = [];
 const VALUE_FLAGS = new Set(["model", "reasoning", "domains", "profile-dir", "max-steps", "timeout", "max-cost", "workspace"]);
+const BOOL_FLAGS = new Set(["hard", "free", "attach", "headed", "verbose", "json", "help"]);
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (!a.startsWith("--")) {
@@ -45,15 +46,31 @@ for (let i = 0; i < argv.length; i++) {
     continue;
   }
   const key = a.slice(2);
-  if (VALUE_FLAGS.has(key)) opt[key] = argv[++i];
-  else opt[key] = true;
+  if (VALUE_FLAGS.has(key)) {
+    const value = argv[++i];
+    if (value === undefined || value.startsWith("--")) fail(`--${key} needs a value`);
+    opt[key] = value;
+  } else if (BOOL_FLAGS.has(key)) opt[key] = true;
+  else fail(`Unknown option --${key}. Did you mean --${closest(key, [...VALUE_FLAGS, ...BOOL_FLAGS])}? Run agent.mjs --help for the list.`);
 }
 const task = positional.join(" ").trim();
 if (!task || opt.help) {
   const lines = readFileSync(new URL(import.meta.url), "utf8").split("\n").slice(1);
   const end = lines.findIndex((l) => !l.startsWith("//"));
   console.log(lines.slice(0, end).map((l) => l.slice(3)).join("\n"));
-  process.exit(task ? 0 : 1);
+  process.exit(opt.help ? 0 : 1);
+}
+
+function closest(word, candidates) {
+  const dist = (x, y) => {
+    const d = Array.from({ length: x.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= y.length; j++) d[0][j] = j;
+    for (let i = 1; i <= x.length; i++)
+      for (let j = 1; j <= y.length; j++)
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+    return d[x.length][y.length];
+  };
+  return candidates.reduce((best, c) => (dist(word, c) < dist(word, best) ? c : best));
 }
 
 const num = (v, name) => {

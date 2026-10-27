@@ -25,7 +25,7 @@ Use the web-browser skill:
 
 ```bash
 cd ~/.agents/skills/web-browser
-./scripts/start.js --stealth 2>&1 | tail -3
+./scripts/start.js 2>&1 | tail -3
 ```
 
 ### 2. Search via URL, extract via DOM

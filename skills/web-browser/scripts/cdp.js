@@ -36,6 +36,26 @@ function remoteObjectValue(remoteObject) {
   return undefined;
 }
 
+const NOT_REACHABLE = `Chrome not reachable on :${DEBUG_PORT}. Run ./scripts/start.js (same BROWSER_DEBUG_PORT)`;
+
+function isUnreachable(e) {
+  const code = e?.cause?.code ?? e?.code;
+  return e?.message === "fetch failed" || code === "ECONNREFUSED" || code === "ENOTFOUND";
+}
+
+// Remove `--tab <url-substring>` from argv. Returns { tab, args }.
+export function takeTabArg(argv) {
+  const args = [...argv];
+  const i = args.indexOf("--tab");
+  if (i === -1) return { tab: null, args };
+  const tab = args[i + 1];
+  if (!tab || tab.startsWith("--")) {
+    throw new Error("--tab needs a URL substring (e.g. --tab github.com/pulls)");
+  }
+  args.splice(i, 2);
+  return { tab, args };
+}
+
 export async function connect(timeout = 5000) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -60,7 +80,7 @@ export async function connect(timeout = 5000) {
       });
       ws.on("error", (e) => {
         clearTimeout(connectTimeout);
-        reject(e);
+        reject(isUnreachable(e) ? new Error(NOT_REACHABLE) : e);
       });
     });
   } catch (e) {
@@ -70,6 +90,7 @@ export async function connect(timeout = 5000) {
         `Connection timeout - is Chrome running with --remote-debugging-port=${DEBUG_PORT}?`,
       );
     }
+    if (isUnreachable(e)) throw new Error(NOT_REACHABLE);
     throw e;
   }
 }
@@ -159,6 +180,26 @@ class CDP {
   async getPages() {
     const { targetInfos } = await this.send("Target.getTargets");
     return targetInfos.filter((t) => t.type === "page");
+  }
+
+  // The last page target, or the last one whose URL contains `match`.
+  // Chrome's target order does not follow tab focus, so name the pick when several tabs are open.
+  async pickPage(match = null) {
+    const pages = await this.getPages();
+    if (!match) {
+      const page = pages.at(-1);
+      if (!page) throw new Error("No active tab found. Open one with nav.js <url> --new");
+      if (pages.length > 1) {
+        console.error(`⚠ ${pages.length} tabs open, using ${page.url}. Pass --tab <url-substring> to pick one.`);
+      }
+      return page;
+    }
+    const page = pages.findLast((p) => p.url.includes(match));
+    if (!page) {
+      const open = pages.map((p) => `  ${p.url}`).join("\n") || "  (none)";
+      throw new Error(`No tab matching "${match}". Open tabs:\n${open}`);
+    }
+    return page;
   }
 
   async attachToPage(targetId) {

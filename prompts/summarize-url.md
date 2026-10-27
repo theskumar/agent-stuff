@@ -25,7 +25,7 @@ to extract readable markdown from the article URL. Before using it, ensure Chrom
 
 ```bash
 cd ~/.agents/skills/web-browser/scripts
-node start.js --profile --stealth 2>/dev/null
+node start.js --profile 2>/dev/null
 node content.js "<article-url>" 2>/dev/null
 ```
 

@@ -10,7 +10,7 @@
 
 ## One Chrome per port
 
-- start.js reuses a Chrome it started in the same mode. If its Chrome runs in the other mode, start.js refuses. To close it, kill the `pid` in `~/.cache/agent-web/browser/state.json`.
+- start.js reuses a Chrome it started in the same mode. If its Chrome runs in the other mode, start.js refuses. `start.js --stop` quits it.
 - If an unknown process holds `:9222`, start.js refuses to attach. Then set `BROWSER_DEBUG_PORT=<port>` for start.js and for every later script.
 - If Chrome lives outside `/Applications`, set `BROWSER_BIN=/path/to/chrome`.
 

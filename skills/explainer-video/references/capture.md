@@ -2,9 +2,9 @@
 
 ## Browser
 
-- Use the agent Chrome from the `web-browser` skill (`start.js`, CDP on :9222). On macOS, `--profile` fails when the agent's host app lacks Full Disk Access: rsync hits EPERM and start.js exits with a stack trace. Don't quietly relaunch without `--profile`. Tell the user, then either they grant access or you use the fresh profile (`~/.cache/agent-web/browser/fresh-profile`): open a tab titled "AGENT BROWSER: log in here", and have them log in **in that window**. The logins persist.
+- Use the agent Chrome from the `web-browser` skill (`start.js`, CDP on :9222). On macOS, `--profile` fails when the agent's host app lacks Full Disk Access: start.js prints `Operation not permitted` and does not start Chrome. Don't quietly relaunch without `--profile`. Tell the user, then either they grant access or you use the fresh profile (`~/.cache/agent-web/browser/fresh-profile`): open a tab titled "AGENT BROWSER: log in here", and have them log in **in that window**. The logins persist.
 - Check each login yourself (page title, a private URL) before you plan around it.
-- Target tabs by URL, never "the active tab": `node scripts/tab.mjs <url-substring> eval '<js>' | shot out.png [fullpage] | nav <url>`. The skill's eval.js and nav.js act on whichever tab happens to be first.
+- Target tabs by URL, never "the active tab": `node scripts/tab.mjs <url-substring> eval '<js>' | shot out.png [fullpage] | nav <url>`. Without `--tab <url-substring>`, the skill's eval.js, nav.js, screenshot.js and ax.js act on the last page in Chrome's target list, which does not follow tab focus.
 - After `nav`, the URL changes. Match on a part that survives, or the next `shot` finds no tab.
 
 ## Recording

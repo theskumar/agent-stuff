@@ -6,6 +6,7 @@
 //   ax.js type <id> <text> [--enter] [--state]   focus, replace text, optionally press Enter
 //   ax.js select <id> <text> [--state]  pick a native <select> option by visible text
 //   ax.js settle                        wait until the page is quiet (no requests, no DOM changes)
+//   --tab <url-substring>               act on the last tab whose URL contains it (default: the last tab)
 // Every action waits for the page to settle, then prints one outcome line:
 //   "navigated to <url>" | "page changed" | "no change". --state appends the new state.
 // Idea borrowed from browser-use/browser-use-pi (src/ax.ts): settle detection, outcome lines, new-id markers.
@@ -13,7 +14,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { connect } from "./cdp.js";
+import { connect, takeTabArg } from "./cdp.js";
+import { applyActiveEmulation } from "./emulation-state.js";
 
 const CONTROLS = new Set(
   "button link textbox searchbox combobox listbox option checkbox radio switch slider spinbutton tab menuitem menuitemcheckbox menuitemradio treeitem".split(
@@ -34,15 +36,21 @@ const isContextLoss = (e) =>
     String(e?.message ?? e),
   );
 
-const argv = process.argv.slice(2);
+let tabMatch, argv;
+try {
+  ({ tab: tabMatch, args: argv } = takeTabArg(process.argv.slice(2)));
+} catch (e) {
+  console.error("✗", e.message);
+  process.exit(1);
+}
 const cmd = argv[0];
 const flags = new Set(argv.filter((a) => a.startsWith("--")));
 const rest = argv.slice(1).filter((a) => !a.startsWith("--"));
 if (!["state", "click", "type", "select", "settle"].includes(cmd)) {
   console.log(
-    "Usage: ax.js state [--all] | click <id> | type <id> <text> [--enter] | select <id> <text> | settle   (actions accept --state)",
+    "Usage: ax.js state [--all] | click <id> | type <id> <text> [--enter] | select <id> <text> | settle   (actions accept --state; all accept --tab <url-substring>)",
   );
-  process.exit(1);
+  process.exit(cmd === "--help" || cmd === "-h" ? 0 : 1);
 }
 
 const timeout = setTimeout(() => {
@@ -77,9 +85,9 @@ const PROBE = `(() => {
 
 async function main() {
   cdp = await connect(5000);
-  const page = (await cdp.getPages()).at(-1);
-  if (!page) throw new Error("No active tab found");
+  const page = await cdp.pickPage(tabMatch);
   const sid = await cdp.attachToPage(page.targetId);
+  await applyActiveEmulation(cdp, sid);
   const send = (m, p = {}) => cdp.send(m, p, sid);
 
   const probe = async () => {
@@ -286,7 +294,7 @@ async function main() {
 try {
   await main();
 } catch (e) {
-  console.error("✗", e.message === "fetch failed" ? "Chrome not reachable on the debug port. Run ./scripts/start.js" : e.message);
+  console.error("✗", e.message);
   process.exitCode = 1;
 } finally {
   clearTimeout(timeout);

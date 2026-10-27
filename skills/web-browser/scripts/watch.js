@@ -8,6 +8,13 @@ import { connect } from "./cdp.js";
 const LOG_ROOT = join(homedir(), ".cache/agent-web/logs");
 const PID_FILE = join(LOG_ROOT, ".pid");
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log("Usage: watch.js   (start.js runs it in the background)");
+  console.log("\nRecords console messages, exceptions and network events of every tab to");
+  console.log(`${LOG_ROOT}/<date>/<targetId>.jsonl until Chrome exits. Read them with logs-tail.js or net-summary.js.`);
+  process.exit(0);
+}
+
 function ensureDir(dir) {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { connect } from "./cdp.js";
+import { connect, takeTabArg } from "./cdp.js";
 import { applyActiveEmulation } from "./emulation-state.js";
 
 const DEBUG = process.env.DEBUG === "1";
@@ -10,14 +10,22 @@ function isSyntaxError(error) {
   return error?.message?.startsWith("SyntaxError");
 }
 
-const code = process.argv.slice(2).join(" ");
-if (!code) {
-  console.log("Usage: eval.js 'code'");
+let tabMatch, args;
+try {
+  ({ tab: tabMatch, args } = takeTabArg(process.argv.slice(2)));
+} catch (e) {
+  console.error("✗", e.message);
+  process.exit(1);
+}
+const code = args.join(" ");
+const help = code === "--help" || code === "-h";
+if (!code || help) {
+  console.log("Usage: eval.js 'code' [--tab <url-substring>]");
   console.log("\nExamples:");
   console.log('  eval.js "document.title"');
   console.log("  eval.js \"document.querySelectorAll('a').length\"");
   console.log("  eval.js 'document.querySelector(\"button\")?.click(); \"clicked\"'");
-  process.exit(1);
+  process.exit(help ? 0 : 1);
 }
 
 // Global timeout
@@ -31,13 +39,7 @@ try {
   const cdp = await connect(5000);
 
   log("getting pages...");
-  const pages = await cdp.getPages();
-  const page = pages.at(-1);
-
-  if (!page) {
-    console.error("✗ No active tab found");
-    process.exit(1);
-  }
+  const page = await cdp.pickPage(tabMatch);
 
   log("attaching to page...");
   const sessionId = await cdp.attachToPage(page.targetId);
