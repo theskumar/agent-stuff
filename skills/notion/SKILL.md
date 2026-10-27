@@ -1,190 +1,131 @@
 ---
 name: notion
-description: "Read, write, and organize Notion: pages and blocks as markdown, surgical edits to part of a page, comments, database queries and filters, file uploads, and any other Notion API operation. Also ranked workspace search (and people search, sidebar browsing of private/shared/favorite/recent pages. Use for any Notion task: reading, summarizing, creating, updating, searching, or automating."
+description: "Read, edit, search and query Notion pages and databases through the ntn CLI."
+disable-model-invocation: true
 ---
 
 # Notion
 
-Use this skill for Notion tasks: read/write pages as markdown, query databases, upload files, raw API calls, multi-step automations.
+`scripts/` paths below are relative to this skill's folder. Call each script by its absolute path, and stay in the user's directory so their file paths still resolve. `scripts/notion.js` wraps the official `ntn` CLI, and `ntn` owns login and workspace choice. `scripts/notion-mcp.mjs` reaches Notion as the user through the claude.ai Notion connector.
 
-## Architecture
+## Safety
 
-This skill is a thin JavaScript layer over the **official Notion CLI** (`ntn`):
+- **Whole-page replace**: `page update` replaces the entire page body and drops comment anchors. Use it only when the user asks to replace the whole page. For any partial change, use [Partial edits](#partial-edits).
+- **Removal**: trash a page or delete a block only when the user asked for that removal.
+- **MCP writes**: `notion-mcp.mjs` refuses write tools without `--confirm-write`. Pass the flag only after the user confirms that write.
 
-- **Auth and workspace selection are fully delegated to ntn.** This skill stores nothing.
-- **CLI subcommands** are convenience wrappers (URL parsing, stdin handling).
-- **`exec` JS sandbox** lets the agent compose multi-step flows with ntn-backed helpers.
-
-Zero npm deps. Requires `node` (stdlib) and `ntn` on PATH.
-
-**Setup, auth, workspace switching, and error recovery:** [references/setup-and-troubleshooting.md](references/setup-and-troubleshooting.md) (read on demand). First run: `curl -fsSL https://ntn.dev | bash && ntn login`.
-
-## Files
-
-- `scripts/notion.js` — CLI entry + `exec` sandbox (direct REST via ntn — **primary**)
-- `scripts/ntn.js` — ntn shellouts + page-id parsing + REST helpers
-- `scripts/notion-mcp.mjs` — MCP fallback CLI (semantic search + sidebar lists only)
-- `references/mcp-proxy.md` — MCP auth/protocol + when-to-use notes
-- `references/setup-and-troubleshooting.md` — install, auth, workspace switching, error playbook
-
-**Favour the direct API (`notion.js`).** Reach for `notion-mcp.mjs` only for the two things REST can't practically do: search as the user's identity (ranked, sees pages the PAT can't; spans connected sources only where the workspace has Notion AI), and the user's sidebar lists (see "When to fall back to MCP").
-
-## CLI
+## Cheat sheet
 
 ```bash
-node scripts/notion.js whoami                          # identity (parsed from `ntn whoami`)
-node scripts/notion.js page get <id-or-url> [--json]   # markdown to stdout
-node scripts/notion.js page create --parent <ref> [--content <md>]
-node scripts/notion.js page create < page.md     # no --parent = private page (only you); leading # H1 = title; GFM tables + > [!NOTE] alerts (→ callouts) OK
-node scripts/notion.js page update <id-or-url> [--content <md>] [--allow-deleting-content]
-node scripts/notion.js page trash <id-or-url> [--no-yes]
-node scripts/notion.js blocks list <id-or-url> [--limit N] [--json]     # id + type + text preview
-node scripts/notion.js blocks append <id-or-url> [--after <block-id>]   # children JSON via --content/stdin
-node scripts/notion.js blocks update <block-id>                         # payload JSON via --content/stdin
+node scripts/notion.js page get <id-or-url> [--json]          # markdown; properties come first as frontmatter
+node scripts/notion.js page create [--parent page:<id>|database:<id>|data-source:<id>] < page.md
+node scripts/notion.js page update <id-or-url> [--allow-deleting-content] < page.md   # replaces the body
+node scripts/notion.js page trash <id-or-url>
+node scripts/notion.js blocks list <id-or-url> [--limit 100] [--start-cursor <c>] [--json]   # type, id, text per line
+node scripts/notion.js blocks append <id-or-url> [--after <block-id>] [--content '<children-json>']
+node scripts/notion.js blocks update <block-id> [--content '<payload-json>']
 node scripts/notion.js blocks delete <block-id>
-node scripts/notion.js db resolve <database-id>                         # database id → data source ids
-node scripts/notion.js db query <data-source-id> [--filter <json|->] [--sort <s>] [--limit N]
 node scripts/notion.js comment list <id-or-url> [--json]
-node scripts/notion.js comment add <id-or-url> [--markdown <text>]      # stdin if --markdown omitted
-node scripts/notion.js search <query...> [--limit N] [--json]           # keyword, workspace-only
-node scripts/notion.js files list
-node scripts/notion.js files get <upload-id>
-node scripts/notion.js files create <path> | files create --external-url <url>
-node scripts/notion.js api <method> <path> [--content <json>]
-node scripts/notion.js exec [--script '...'] [--timeout 30000]
+node scripts/notion.js comment add <id-or-url> --markdown '<text>'   # inline formatting only
+node scripts/notion.js api <GET|POST|PATCH|DELETE> v1/<path> [--content '<json>']
+node scripts/notion.js exec [--timeout 30000] <<'JS' … JS          # multi-step JS, see Exec
 ```
 
-The `blocks`, `db`, `comment`, `search`, and `files create` subcommands make common flows first-class instead of hand-written `exec`. `blocks append`/`update` read JSON from stdin when `--content` is omitted; `blocks append --after` auto-sets the `2022-06-28` API version required by the `after` param.
-
-`--parent` accepts `page:<id>`, `database:<id>`, or `data-source:<id>`. `page create/update` and `api` read body/content from stdin if `--content` is omitted. `page get` / `update` / `trash` accept either a UUID or a full Notion URL.
-
-> ⚠️ **`page update` REPLACES the entire page body — it is destructive, not append.** Passing `--content` overwrites every existing block on the page (and drops comment/discussion anchors). **Never use `page update` to add or tweak a section on an existing page you didn't just create.** For any surgical change to an existing page, use the block-level API (see "Surgical block edits" below) — do not round-trip the whole page through markdown.
-
-For file uploads use the `files create` subcommand (or `ntn files create` directly):
+Call these through `ntn` itself, not `notion.js`:
 
 ```bash
-node scripts/notion.js files create ./image.png
-node scripts/notion.js files create --external-url https://example.com/photo.png
+ntn datasources resolve <database-id>                             # prints <data-source-id> <TAB> name
+ntn datasources query <data-source-id> --json [--filter '<json>'] [--sort '<property> desc'] [--limit 25] [--start-cursor <c>]
+ntn files create --filename <name> [--content-type <mime>] < <path>   # prints <upload-id> <TAB> name <TAB> status …
 ```
-
-## When to fall back to MCP (`notion-mcp.mjs`)
-
-The direct API is the default. Use the MCP fallback **only** for capabilities REST can't practically do. Both run as the user's Claude OAuth identity, so they see everything the user sees — a PAT integration only sees explicitly-shared pages, so MCP `search` routinely surfaces (and can `fetch`) pages the PAT `search`/`blocks` calls return empty for.
-
-> **AI vs workspace search:** connected-source search (Slack/Drive/GitHub/Jira/Linear) needs **Notion AI + connectors**. This workspace lacks it, so `search` runs the Notion-only `workspace_search` backend (its value here is OAuth visibility + ranking, not connected sources). The backend is auto-selected; it will start including connected sources automatically if Notion AI is enabled. Check entitlements with `call notion-fetch '{"id":"self"}'`.
 
 ```bash
-MCP="scripts/notion-mcp.mjs"
-node "$MCP" auth                                          # verify connector + credentials
-node "$MCP" search 'Q3 revenue plan' --limit 5           # ranked search as the user (Notion-only here; +connected sources with Notion AI)
-node "$MCP" search jane@example.com --user               # people search
-node "$MCP" list recent --limit 10                       # sidebar: private|shared|favorite|recent
-node "$MCP" tools                                        # discover connector tools
-node "$MCP" call notion-fetch '{"id":"https://notion.so/..."}'   # generic read escape hatch
+node scripts/notion-mcp.mjs search '<query>' [--user] [--limit 10]    # ranked search as the user
+node scripts/notion-mcp.mjs list private|shared|favorite|recent [--limit 20]
+node scripts/notion-mcp.mjs call notion-fetch '{"id":"<url-or-id>"}'
 ```
 
-`search` and `list` are the only predefined MCP capabilities; anything else goes through `call` (writes require `--confirm-write`). Auth is Claude OAuth (`CLAUDE_CODE_OAUTH_TOKEN` → macOS Keychain → `~/.claude/.credentials.json`). Details and entitlement limits: [references/mcp-proxy.md](references/mcp-proxy.md).
+- **Workspace**: every command targets the default workspace. When the user names another workspace, prefix each `notion.js` or `ntn` command with `NOTION_WORKSPACE_ID=<workspace-uuid>`.
+- **Ids**: `<id-or-url>` takes a Notion URL or id. Every other id slot takes the bare id, the 32 hex characters at the end of the URL.
+- **Content input**: `page create`, `page update`, `blocks append`, `blocks update` and `api` take the body on stdin (`< file`, a pipe or a heredoc), or as text in `--content '<text>'`.
+- **New pages**: without `--parent`, `page create` makes a private page. A leading `# Title` line becomes the title. The script turns GitHub alerts (`> [!WARNING]`) into callouts and keeps GFM tables.
+- **Databases**: a database URL holds a database id. Run `ntn datasources resolve` on it, then query the data source id it prints.
+- **JSON output**: `node scripts/notion.js db query` and `notion.datasources.query()` print TSV text. For JSON, call `ntn datasources query --json` or `api POST v1/data_sources/<id>/query`.
+- **File names**: `node scripts/notion.js files create <path>` drops the file name. Upload with `ntn files create --filename` instead.
 
-## Exec (JS sandbox)
+## Partial edits
 
-For multi-step flows. Pipe a script via stdin/heredoc, or pass `--script`.
+**Change text in place**: send search-and-replace edits to the markdown endpoint. Copy each `old_str` exactly from `page get`. When no edit matches, or one `old_str` matches in several places, the call returns `validation_error`. Misses next to a match come back in `warnings`.
+
+```bash
+node scripts/notion.js api PATCH v1/pages/<page-id>/markdown --content '{"type":"update_content","update_content":{"content_updates":[{"old_str":"Owner: TBD","new_str":"Owner: Priya"}]}}'
+```
+
+**Add blocks**: `blocks append` adds children at the end of the page. With `--after <block-id>` from `blocks list`, it inserts them after that block.
+
+```bash
+echo '[{"type":"heading_2","heading_2":{"rich_text":[{"text":{"content":"Risks"}}]}},
+{"type":"bulleted_list_item","bulleted_list_item":{"rich_text":[{"text":{"content":"Vendor delay","link":{"url":"https://example.com"}},"annotations":{"bold":true}}]}}]' \
+  | node scripts/notion.js blocks append <id-or-url>
+```
+
+A divider is `{"type":"divider","divider":{}}`. A `\n` inside `content` is a line break within the block.
+
+**Edit or remove one block**: `blocks update <block-id>` takes only that block type's payload, such as `{"paragraph":{"rich_text":[…]}}`. `blocks delete <block-id>` archives the block.
+
+## Hard shapes
+
+- **Page properties**: read the page with `api GET v1/pages/<id>` to learn each property's type. Then send the payload for that type:
+  `node scripts/notion.js api PATCH v1/pages/<id> --content '{"properties":{"Status":{"status":{"name":"Done"}},"Due":{"date":{"start":"2026-10-27"}}}}'`
+  A select property takes `{"select":{"name":"…"}}`.
+- **Attach an upload**: take the first TSV field of `ntn files create` as the upload id. Append a block such as `{"type":"image","image":{"type":"file_upload","file_upload":{"id":"<upload-id>"}}}`, with `file`, `pdf` or `video` for other kinds. A files property takes `{"files":[{"type":"file_upload","file_upload":{"id":"<upload-id>"},"name":"<name>"}]}`.
+- **Rich comments**: for mentions, custom emoji or colors, send `rich_text` to `api POST v1/comments` instead of `--markdown`.
+- **Database filter**: `--filter '{"property":"Status","status":{"equals":"Blocked"}}'`. Use `select` or `checkbox` in place of `status` to match the property's type.
+
+## Exec
+
+`exec` runs the script as an async function body and prints `{ok, logs, result}` with the returned value. The script sees `notion`, `fetch`, `Buffer`, `URL` and `console`. It has no `require`, `import` or file access, so put the data in the script text.
 
 ```bash
 node scripts/notion.js exec <<'JS'
-const md = await notion.page.get('https://www.notion.so/...');
-const search = await notion.api('POST', 'v1/search', { page_size: 5 });
-return { chars: md.length, hits: search.results.map(r => r.url) };
+const id = notion.parsePageId('https://www.notion.so/acme/Plan-1a2b3c4d5e6f40718293a4b5c6d7e8f9');
+const all = []; let cursor;
+do {
+  const r = await notion.api('GET', `v1/blocks/${id}/children`, null, { query: { page_size: 100, ...(cursor && { start_cursor: cursor }) } });
+  all.push(...r.results); cursor = r.has_more ? r.next_cursor : null;
+} while (cursor);
+return all.map(b => b.type);
 JS
 ```
 
-Bindings inside `exec`:
+- `notion.api(method, path, body?, { query?, notionVersion? })` returns parsed JSON. Put query parameters in `query`, not in the path.
+- The other bindings mirror the CLI: `notion.page.get|create|update|trash`, `notion.blocks.list|append|update|delete`, `notion.comments.list|add`, `notion.search`, `notion.files.list|get|create`, `notion.datasources.resolve|query`, `notion.whoAmI`.
+- Run independent requests with `Promise.all`.
 
-| Binding | Purpose |
-|---|---|
-| `notion.api(method, path, body, opts)` | Generic Notion API call via `ntn api`. Returns parsed JSON. `opts.query` for GET query params, `opts.notionVersion` to override. |
-| `notion.api.help(path)` / `.spec(path)` / `.docs(path)` | Self-documenting endpoint metadata. **Use before guessing payload shape.** |
-| `notion.whoAmI()` | Parsed `ntn whoami` (bot/workspace/user identity). |
-| `notion.parsePageId(s)` | URL or id → canonical UUID. |
-| `notion.page.get(idOrUrl, { json })` | Markdown string, or full JSON when `json: true`. |
-| `notion.page.create({ parent, content })` | Create from markdown. Returns page JSON. |
-| `notion.page.update(idOrUrl, { content, allowDeletingContent })` | Update body. |
-| `notion.page.trash(idOrUrl, { yes })` | Move to trash. |
-| `notion.blocks.list(idOrUrl, { pageSize, startCursor })` | List child blocks (raw list response). |
-| `notion.blocks.append(idOrUrl, { children, after })` | Insert blocks; `after` auto-sets `2022-06-28`. |
-| `notion.blocks.update(blockId, payload)` / `notion.blocks.delete(blockId)` | Edit/archive one block. |
-| `notion.comments.list(idOrUrl, { startCursor })` / `notion.comments.add(idOrUrl, { markdown })` | Read/add comments. |
-| `notion.search(query, { filter, sort, pageSize, startCursor })` | Keyword `v1/search`. |
-| `notion.datasources.resolve(databaseId)` | Database id → data source ids (tab-separated text). |
-| `notion.datasources.query(dataSourceId, { limit, startCursor, sort, filter })` | Query pages. `filter` accepts object or JSON string. |
-| `notion.files.list()` / `notion.files.get(uploadId)` / `notion.files.create({ filePath, externalUrl })` | List/get/create uploads. |
-| Globals: `fetch`, `Buffer`, `URL`, `console` (captured in `logs`) | |
+## Endpoint lookup
 
-**Rule of thumb:**
-- Markdown read/write of pages → `notion.page.*`
-- Surgical edits on an existing page → `notion.blocks.*` (or the `blocks` CLI)
-- Database queries → `notion.datasources.query()` or `notion.api('POST', 'v1/data_sources/<id>/query', body)`
-- Anything else → `notion.api(method, path, body)`
-- Don't know the endpoint shape → `notion.api.help/spec/docs(path)` first
-- Need search as the user (ranked, beyond PAT visibility) / the user's sidebar → `notion-mcp.mjs` (fallback)
+When an endpoint shape is unknown, run `ntn api <path> --help` first. Then read `ntn api <path> --docs -X <METHOD> | head -120`. Docs and `--spec` output run 35 to 180 KB, so read them through `head` or `grep`. A path with several methods needs `-X <METHOD>`.
 
-## Discovery
+## Search and the MCP fallback
 
-`ntn` is self-documenting. Use before guessing endpoint shapes:
+- **Which search**: `notion-mcp.mjs search` runs as the user and ranks results, so it finds pages the ntn integration can't see. `node scripts/notion.js search <query>` matches titles in pages shared with the integration only.
+- **Connected sources**: MCP search covers Slack, Drive, GitHub, Jira and Linear only when the workspace has Notion AI. Otherwise it searches Notion alone.
+- **Other MCP reads**: use `notion-mcp.mjs` for the user's sidebar (`list`), people (`search <name> --user`) and pages that return `object_not_found` through ntn. Read those pages with `call notion-fetch`; there is no `fetch` subcommand. `tools` lists the connector's tools.
 
-```bash
-ntn api ls                           # list every public endpoint
-ntn api <path> --help                # methods, doc links, usage
-ntn api <path> --docs                # full official docs
-ntn api <path> --spec                # reduced OpenAPI fragment (request/response schema)
-ntn <command> --help                 # help for any command
-```
+## Errors
 
-From inside `exec`: `notion.api.help(path)` / `.spec(path)` / `.docs(path)`.
+- `No auth token` → ask the user to run `ntn login`.
+- `object_not_found` → run `ntn doctor` to check the workspace, then try `notion-mcp.mjs call notion-fetch`.
+- `403 restricted_resource` on `v1/users` → personal tokens can't read users. Use `notion-mcp.mjs search <name> --user`.
+- `Multiple methods are available` → add `-X <METHOD>`.
 
-## Surgical block edits (add / edit / remove parts of an existing page)
+## Index
 
-`page update` clobbers the whole page (see warning above). To change **part** of a page without touching the rest, work at the block level. The `blocks` subcommands (and `notion.blocks.*` exec bindings) wrap the raw calls below — prefer them:
+- ntn: `pages get|create|update|trash`, `datasources resolve|query`, `files create|get|list`, `api ls`, `api <path> [--help|--docs|--spec]`, `whoami`, `doctor`, `login`, `logout`, `update`, `completions`, `workers`.
+- API endpoints without a wrapper, called through `api`: `POST v1/pages/<id>/move`, `v1/views`, `POST v1/blocks/meeting_notes/query`, `GET v1/data_sources/<id>/templates`, `GET v1/custom_emojis`. `ntn api ls` lists every endpoint.
+- notion.js: `whoami`, `search <query> [--limit N] [--json]`, `db resolve|query`, `files list|get|create [--external-url <url>]`, `exec --script '<js>'`.
+- notion-mcp.mjs: `auth`, `search [--created-after|--created-before YYYY-MM-DD]`, `tools`, `call <tool> '<json>' [--confirm-write]`, and `--json` on every command.
 
-1. **List children to get block ids:**
-   ```bash
-   node scripts/notion.js blocks list <url-or-id>       # type\tid\ttext preview
-   ```
+## Look up the rest
 
-2. **Insert new blocks at a position** (only adds; existing blocks untouched) — `--after` sets the block id to follow and auto-adds the required API version:
-   ```bash
-   echo '[ /* block objects */ ]' | node scripts/notion.js blocks append <url-or-id> --after <block-id>
-   ```
-   > **`after` gotcha:** the default API version rejects `after` (`400 … body.after should be not present`). `blocks append` passes `{ notionVersion: '2022-06-28' }` for you. Omit `--after` to append at the end of the page instead.
-
-3. **Edit one block's text:** `blocks update <block-id>` with just that block-type payload (e.g. `{ "paragraph": { "rich_text": [...] } }` via `--content`/stdin). Changes only that block.
-
-4. **Delete one block:** `blocks delete <block-id>` (archives it).
-
-Raw-API equivalents if you need them: `GET|PATCH|DELETE v1/blocks/...` via `notion.api(...)`.
-
-Block object shape for `children`: `{ object:'block', type:'paragraph', paragraph:{ rich_text:[ { type:'text', text:{ content:'…', link:{url:'…'}? }, annotations:{ bold:true }? } ] } }`. Headings use `heading_2`/`heading_3`; a horizontal rule is `{ object:'block', type:'divider', divider:{} }`. A `\n` inside a rich_text `content` renders as a soft line break within the same block (matches the `**Bold**<br>text` lead-in pattern common in these docs).
-
-## Markdown in comments
-
-Add/read comments with the `comment` subcommands (`comment add <page> --markdown '...'`, `comment list <page>`) or, in `exec`, `notion.comments.add/list`. Both use the `markdown` field on `POST /v1/comments`:
-
-```js
-await notion.api('POST', 'v1/comments', {
-  parent: { page_id: 'abc...' },
-  markdown: 'See the [spec](https://example.com) and **acknowledge**.',
-});
-```
-
-Fall back to `rich_text` only for features markdown can't express (mentions, custom emoji, colors).
-
-## Agent guidance
-
-1. "Read/summarize this page" → `page get` (CLI) or `notion.page.get()` (exec).
-2. "Create a new page from markdown" → `page create`. "Add/change a section on an **existing** page" → **Surgical block edits** (`blocks` subcommands / `notion.blocks.*`), NOT `page update` — `page update` overwrites the whole body. Only use `page update` to intentionally replace an entire page's content.
-3. For any other API endpoint inside `exec`, call `notion.api.help('v1/<path>')` or `notion.api.spec('v1/<path>')` **before** writing the call — the spec is authoritative; memorized shapes drift.
-4. Databases: use `db query <data-source-id>` / `notion.datasources.query(...)`. If the user gave you a database id, resolve it first with `db resolve <database-id>` / `notion.datasources.resolve(databaseId)`.
-5. Use `Promise.all` for independent requests.
-6. If `notion.whoAmI()` errors with "No auth token", instruct the user to run `ntn login`.
-7. On `object_not_found`: either the active workspace is wrong (`ntn doctor` / `NOTION_WORKSPACE_ID=<uuid>`), or the page isn't shared with the PAT integration. If it's a sharing/visibility gap, the MCP fallback (`notion-mcp.mjs`, runs as the user's OAuth identity) can usually reach it.
-8. "Search for X" / "what do we have on Y": REST `search` is keyword + PAT-scoped. Prefer `notion-mcp.mjs search` — it runs as the user (finds pages the PAT can't see) and ranks results; it also spans connected sources (Slack/Drive/GitHub/Jira/Linear) **iff** the workspace has Notion AI, otherwise it returns Notion-only `workspace_search`. `--user` does people search. For the user's sidebar (private/shared/favorite/recent), use `notion-mcp.mjs list`.
-9. Install/auth/workspace or error recovery (`No auth token`, `object_not_found`, PAT limits) → [references/setup-and-troubleshooting.md](references/setup-and-troubleshooting.md).
+- Install ntn, log in to another workspace, MCP auth or connector errors, plan limits → [references/troubleshooting.md](references/troubleshooting.md)
