@@ -116,6 +116,7 @@ Prompt templates (pi: `/name`, claude: `/name`). Source: [`prompts/`](prompts/).
 | [`edit-article.md`](prompts/edit-article.md) | Edit/revise article drafts: restructure sections by dependency, tighten prose (source: [mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/personal/edit-article/SKILL.md)) |
 | [`extract_wisdom.md`](prompts/extract_wisdom.md) | Extract surprising and insightful information from text |
 | [`security-audit.md`](prompts/security-audit.md) | Comprehensive security audit (OWASP, deps, secrets) |
+| [`to-questionnaire.md`](prompts/to-questionnaire.md) | `/to-questionnaire` interviews you about recipient and needed answers, then writes a Markdown questionnaire for them to fill in (source: [mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/productivity/to-questionnaire/SKILL.md)) |
 | [`summarize-url.md`](prompts/summarize-url.md) | Fetch and summarize URLs (including HN posts + comments) |
 | [`commit.md`](prompts/commit.md) | `/commit` slash command. Preloads `git status`/`diff`/`log` via `inline-bash` and delegates formatting to the `commit` skill |
 | [`go.md`](prompts/go.md) | `/go` execute prompt that nudges the agent to follow Explore → Plan → Clarify → Execute |
