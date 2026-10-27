@@ -368,20 +368,22 @@ Usage:
   notion-mcp.mjs search <query> [--limit N<=25] [--user]
                         [--created-after YYYY-MM-DD] [--created-before YYYY-MM-DD] [--json]
   notion-mcp.mjs list <private|shared|favorite|recent> [--limit N] [--json]
+  notion-mcp.mjs fetch <url-or-id> [--json]
   notion-mcp.mjs tools [--json]
   notion-mcp.mjs call <tool-name> '<arguments-json>' [--confirm-write] [--json]
 
 search: semantic search across Notion + connected sources (Slack, Drive, GitHub,
         Jira, Linear, ...). --user finds people by name/email.
 list:   the current user's sidebar (no REST equivalent).
-call:   generic escape hatch for other read tools (e.g. notion-fetch,
+fetch:  read a page, database or data source as the user (notion-fetch).
+call:   generic escape hatch for other tools (e.g. notion-get-comments,
         notion-query-meeting-notes) if you ever need them. Writes need --confirm-write.
 
 Examples:
   notion-mcp.mjs search 'Q3 revenue plan' --limit 5
   notion-mcp.mjs search jane@example.com --user
   notion-mcp.mjs list recent --limit 10
-  notion-mcp.mjs call notion-fetch '{"id":"https://notion.so/..."}'
+  notion-mcp.mjs fetch https://notion.so/...
 
 Auth order: CLAUDE_CODE_OAUTH_TOKEN, macOS Keychain, ~/.claude/.credentials.json.
 Writes are blocked unless --confirm-write is provided.`);
@@ -419,6 +421,10 @@ function commandToCall(command, args, options) {
       const params = {};
       if (options.limit !== undefined) params.limit = options.limit;
       return [tool, params];
+    }
+    case "fetch": {
+      if (!args[0]) fail("Usage: fetch <url-or-id>");
+      return ["notion-fetch", { id: args[0] }];
     }
     default:
       return null;

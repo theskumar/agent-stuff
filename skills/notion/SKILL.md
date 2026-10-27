@@ -25,33 +25,26 @@ node scripts/notion.js blocks list <id-or-url> [--limit 100] [--start-cursor <c>
 node scripts/notion.js blocks append <id-or-url> [--after <block-id>] [--content '<children-json>']
 node scripts/notion.js blocks update <block-id> [--content '<payload-json>']
 node scripts/notion.js blocks delete <block-id>
+node scripts/notion.js db resolve <database-id> [--json]           # prints <data-source-id> <TAB> name
+node scripts/notion.js db query <data-source-id> [--json] [--filter '<json>'] [--sort '<property> desc'] [--limit 25] [--start-cursor <c>]
+node scripts/notion.js files create <path> [--json]                 # prints <upload-id> <TAB> name <TAB> status …
 node scripts/notion.js comment list <id-or-url> [--json]
 node scripts/notion.js comment add <id-or-url> --markdown '<text>'   # inline formatting only
 node scripts/notion.js api <GET|POST|PATCH|DELETE> v1/<path> [--content '<json>']
 node scripts/notion.js exec [--timeout 30000] <<'JS' … JS          # multi-step JS, see Exec
 ```
 
-Call these through `ntn` itself, not `notion.js`:
-
-```bash
-ntn datasources resolve <database-id>                             # prints <data-source-id> <TAB> name
-ntn datasources query <data-source-id> --json [--filter '<json>'] [--sort '<property> desc'] [--limit 25] [--start-cursor <c>]
-ntn files create --filename <name> [--content-type <mime>] < <path>   # prints <upload-id> <TAB> name <TAB> status …
-```
-
 ```bash
 node scripts/notion-mcp.mjs search '<query>' [--user] [--limit 10]    # ranked search as the user
 node scripts/notion-mcp.mjs list private|shared|favorite|recent [--limit 20]
-node scripts/notion-mcp.mjs call notion-fetch '{"id":"<url-or-id>"}'
+node scripts/notion-mcp.mjs fetch <url-or-id>                         # read a page as the user
 ```
 
 - **Workspace**: every command targets the default workspace. When the user names another workspace, prefix each `notion.js` or `ntn` command with `NOTION_WORKSPACE_ID=<workspace-uuid>`.
 - **Ids**: `<id-or-url>` takes a Notion URL or id. Every other id slot takes the bare id, the 32 hex characters at the end of the URL.
 - **Content input**: `page create`, `page update`, `blocks append`, `blocks update` and `api` take the body on stdin (`< file`, a pipe or a heredoc), or as text in `--content '<text>'`.
 - **New pages**: without `--parent`, `page create` makes a private page. A leading `# Title` line becomes the title. The script turns GitHub alerts (`> [!WARNING]`) into callouts and keeps GFM tables.
-- **Databases**: a database URL holds a database id. Run `ntn datasources resolve` on it, then query the data source id it prints.
-- **JSON output**: `node scripts/notion.js db query` and `notion.datasources.query()` print TSV text. For JSON, call `ntn datasources query --json` or `api POST v1/data_sources/<id>/query`.
-- **File names**: `node scripts/notion.js files create <path>` drops the file name. Upload with `ntn files create --filename` instead.
+- **Databases**: a database URL holds a database id. Run `db resolve` on it, then query the data source id it prints.
 
 ## Partial edits
 
@@ -78,7 +71,7 @@ A divider is `{"type":"divider","divider":{}}`. A `\n` inside `content` is a lin
 - **Page properties**: read the page with `api GET v1/pages/<id>` to learn each property's type. Then send the payload for that type:
   `node scripts/notion.js api PATCH v1/pages/<id> --content '{"properties":{"Status":{"status":{"name":"Done"}},"Due":{"date":{"start":"2026-10-27"}}}}'`
   A select property takes `{"select":{"name":"…"}}`.
-- **Attach an upload**: take the first TSV field of `ntn files create` as the upload id. Append a block such as `{"type":"image","image":{"type":"file_upload","file_upload":{"id":"<upload-id>"}}}`, with `file`, `pdf` or `video` for other kinds. A files property takes `{"files":[{"type":"file_upload","file_upload":{"id":"<upload-id>"},"name":"<name>"}]}`.
+- **Attach an upload**: take the upload id from `files create`. Append a block such as `{"type":"image","image":{"type":"file_upload","file_upload":{"id":"<upload-id>"}}}`, with `file`, `pdf` or `video` for other kinds. A files property takes `{"files":[{"type":"file_upload","file_upload":{"id":"<upload-id>"},"name":"<name>"}]}`.
 - **Rich comments**: for mentions, custom emoji or colors, send `rich_text` to `api POST v1/comments` instead of `--markdown`.
 - **Database filter**: `--filter '{"property":"Status","status":{"equals":"Blocked"}}'`. Use `select` or `checkbox` in place of `status` to match the property's type.
 
@@ -110,12 +103,12 @@ When an endpoint shape is unknown, run `ntn api <path> --help` first. Then read 
 
 - **Which search**: `notion-mcp.mjs search` runs as the user and ranks results, so it finds pages the ntn integration can't see. `node scripts/notion.js search <query>` matches titles in pages shared with the integration only.
 - **Connected sources**: MCP search covers Slack, Drive, GitHub, Jira and Linear only when the workspace has Notion AI. Otherwise it searches Notion alone.
-- **Other MCP reads**: use `notion-mcp.mjs` for the user's sidebar (`list`), people (`search <name> --user`) and pages that return `object_not_found` through ntn. Read those pages with `call notion-fetch`; there is no `fetch` subcommand. `tools` lists the connector's tools.
+- **Other MCP reads**: use `notion-mcp.mjs` for the user's sidebar (`list`), people (`search <name> --user`) and pages that return `object_not_found` through ntn. Read those pages with `fetch`. `tools` lists the connector's tools.
 
 ## Errors
 
 - `No auth token` → ask the user to run `ntn login`.
-- `object_not_found` → run `ntn doctor` to check the workspace, then try `notion-mcp.mjs call notion-fetch`.
+- `object_not_found` → run `ntn doctor` to check the workspace, then try `notion-mcp.mjs fetch`.
 - `403 restricted_resource` on `v1/users` → personal tokens can't read users. Use `notion-mcp.mjs search <name> --user`.
 - `Multiple methods are available` → add `-X <METHOD>`.
 
@@ -123,7 +116,7 @@ When an endpoint shape is unknown, run `ntn api <path> --help` first. Then read 
 
 - ntn: `pages get|create|update|trash`, `datasources resolve|query`, `files create|get|list`, `api ls`, `api <path> [--help|--docs|--spec]`, `whoami`, `doctor`, `login`, `logout`, `update`, `completions`, `workers`.
 - API endpoints without a wrapper, called through `api`: `POST v1/pages/<id>/move`, `v1/views`, `POST v1/blocks/meeting_notes/query`, `GET v1/data_sources/<id>/templates`, `GET v1/custom_emojis`. `ntn api ls` lists every endpoint.
-- notion.js: `whoami`, `search <query> [--limit N] [--json]`, `db resolve|query`, `files list|get|create [--external-url <url>]`, `exec --script '<js>'`.
+- notion.js: `whoami`, `search <query> [--limit N] [--json]`, `files list|get|create [--external-url <url>|--filename <name>]`, `exec --script '<js>'`.
 - notion-mcp.mjs: `auth`, `search [--created-after|--created-before YYYY-MM-DD]`, `tools`, `call <tool> '<json>' [--confirm-write]`, and `--json` on every command.
 
 ## Look up the rest

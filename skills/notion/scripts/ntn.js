@@ -15,11 +15,12 @@
 //   datasourcesResolve / datasourcesQuery
 //   filesList / filesGet
 //   apiCall(method, path, body)       -> generic ntn api passthrough
-//   apiMeta(path, 'help'|'spec'|'docs') -> documentation text
+//   apiMeta(path, 'help'|'spec'|'docs', method?) -> documentation text
 //   whoAmI()                          -> identity tab-separated string
 
 const { spawnSync, spawn } = require('node:child_process');
 const fs = require('node:fs');
+const path = require('node:path');
 
 const UUID_RE =
   /([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i;
@@ -199,18 +200,21 @@ async function pageTrash(idOrUrl, { yes = true, notionVersion } = {}) {
 
 // ---------- datasources ----------
 
-async function datasourcesResolve(databaseId, { notionVersion } = {}) {
+// Pass `json: false` to get ntn's tab-separated text instead of parsed JSON.
+async function datasourcesResolve(databaseId, { json = true, notionVersion } = {}) {
   const args = ['datasources', 'resolve', databaseId];
+  if (json) args.push('--json');
   if (notionVersion) args.push('--notion-version', notionVersion);
   const { stdout } = await runNtn({ args });
-  return stdout.trim();
+  return json ? tryParseJson(stdout) : stdout.trim();
 }
 
 async function datasourcesQuery(
   dataSourceId,
-  { limit, startCursor, sort, filter, notionVersion } = {},
+  { limit, startCursor, sort, filter, json = true, notionVersion } = {},
 ) {
   const args = ['datasources', 'query', dataSourceId];
+  if (json) args.push('--json');
   if (limit !== undefined) args.push('--limit', String(limit));
   if (startCursor) args.push('--start-cursor', startCursor);
   if (sort) {
@@ -232,25 +236,49 @@ async function datasourcesQuery(
 
 // ---------- files ----------
 
-async function filesList() {
-  const { stdout } = await runNtn({ args: ['files', 'list'] });
+async function filesList({ json = true } = {}) {
+  const args = ['files', 'list'];
+  if (json) args.push('--json');
+  const { stdout } = await runNtn({ args });
   return tryParseJson(stdout);
 }
 
-async function filesGet(uploadId) {
-  const { stdout } = await runNtn({ args: ['files', 'get', uploadId] });
+async function filesGet(uploadId, { json = true } = {}) {
+  const args = ['files', 'get', uploadId];
+  if (json) args.push('--json');
+  const { stdout } = await runNtn({ args });
   return tryParseJson(stdout);
 }
+
+// ntn names a stdin upload "upload" unless told otherwise, so send the name
+// and, for known extensions, the MIME type.
+const MIME_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.svg': 'image/svg+xml', '.heic': 'image/heic',
+  '.pdf': 'application/pdf', '.zip': 'application/zip', '.json': 'application/json',
+  '.txt': 'text/plain', '.md': 'text/markdown', '.csv': 'text/csv', '.html': 'text/html',
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.m4a': 'audio/mp4',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
 
 // Upload a file via `ntn files create`. Pass a local path or an external URL.
-async function filesCreate({ filePath, externalUrl } = {}) {
+// `filename` and `contentType` default to the path's basename and extension.
+async function filesCreate({ filePath, externalUrl, filename, contentType, json = true } = {}) {
+  const args = ['files', 'create'];
+  if (json) args.push('--json');
   if (externalUrl) {
-    const { stdout } = await runNtn({ args: ['files', 'create', '--external-url', externalUrl] });
+    const { stdout } = await runNtn({ args: [...args, '--external-url', externalUrl] });
     return tryParseJson(stdout);
   }
   if (!filePath) throw new Error('filesCreate: filePath or externalUrl required');
   const data = fs.readFileSync(filePath);
-  const { stdout } = await runNtn({ args: ['files', 'create'], stdin: data });
+  const type = contentType || MIME_TYPES[path.extname(filePath).toLowerCase()];
+  args.push('--filename', filename || path.basename(filePath));
+  if (type) args.push('--content-type', type);
+  const { stdout } = await runNtn({ args, stdin: data });
   return tryParseJson(stdout);
 }
 
@@ -357,9 +385,11 @@ async function apiCall(method, apiPath, body = null, opts = {}) {
   return tryParseJson(stdout);
 }
 
-async function apiMeta(path, kind /* 'help' | 'spec' | 'docs' */) {
-  const flag = `--${kind}`;
-  const { stdout } = await runNtn({ args: ['api', path, flag] });
+// Paths with several methods (e.g. v1/blocks/<id>/children) need `method`.
+async function apiMeta(apiPath, kind /* 'help' | 'spec' | 'docs' */, method) {
+  const args = ['api', apiPath, `--${kind}`];
+  if (method) args.push('-X', method.toUpperCase());
+  const { stdout } = await runNtn({ args });
   return stdout;
 }
 

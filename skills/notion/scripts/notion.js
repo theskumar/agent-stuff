@@ -17,6 +17,12 @@ const ntn = require('./ntn');
 
 // ---------- argv parsing ----------
 
+const FLAGS = [
+  '--script', '--timeout', '--json', '--parent', '--content', '--allow-deleting-content', '--after',
+  '--markdown', '--external-url', '--filename', '--content-type', '--start-cursor', '--filter', '--sort',
+  '--limit', '--yes', '--no-yes', '--help',
+];
+
 function parseArgs(argv) {
   const positional = [];
   const opts = {};
@@ -36,6 +42,8 @@ function parseArgs(argv) {
     if (a === '--after') { opts.after = argv[++i]; continue; }
     if (a === '--markdown') { opts.markdown = argv[++i]; continue; }
     if (a === '--external-url') { opts.externalUrl = argv[++i]; continue; }
+    if (a === '--filename') { opts.filename = argv[++i]; continue; }
+    if (a === '--content-type') { opts.contentType = argv[++i]; continue; }
     if (a === '--start-cursor') { opts.startCursor = argv[++i]; continue; }
     if (a === '--filter') { opts.filter = argv[++i]; continue; }
     if (a === '--sort') { (opts.sort ||= []).push(argv[++i]); continue; }
@@ -48,6 +56,7 @@ function parseArgs(argv) {
     if (a === '--yes') { opts.yes = true; continue; }
     if (a === '--no-yes') { opts.yes = false; continue; }
     if (a === '-h' || a === '--help') { opts.help = true; continue; }
+    if (/^--?[A-Za-z]/.test(a)) throw new Error(`Unknown flag: ${a}. Valid flags: ${FLAGS.join(' ')}`);
     positional.push(a);
   }
   return { positional, opts };
@@ -64,8 +73,9 @@ function readStdinText() {
   });
 }
 
+// `--content -` reads stdin, like omitting --content.
 async function readContent(opts) {
-  if (opts.content !== undefined) return opts.content;
+  if (opts.content !== undefined && opts.content !== '-') return opts.content;
   const stdin = await readStdinText();
   if (!stdin) throw new Error('Markdown content required: pass --content "..." or pipe via stdin.');
   return stdin;
@@ -126,9 +136,9 @@ function buildExecHelper() {
   // Generic api callable: notion.api(method, path, body, opts) → JSON
   // Plus discovery accessors: notion.api.help / spec / docs.
   const api = (method, apiPath, body, opts) => ntn.apiCall(method, apiPath, body, opts);
-  api.help = (apiPath) => ntn.apiMeta(apiPath, 'help');
-  api.spec = (apiPath) => ntn.apiMeta(apiPath, 'spec');
-  api.docs = (apiPath) => ntn.apiMeta(apiPath, 'docs');
+  api.help = (apiPath, method) => ntn.apiMeta(apiPath, 'help', method);
+  api.spec = (apiPath, method) => ntn.apiMeta(apiPath, 'spec', method);
+  api.docs = (apiPath, method) => ntn.apiMeta(apiPath, 'docs', method);
 
   return {
     parsePageId: ntn.parsePageId,
@@ -178,22 +188,24 @@ Usage:
   node scripts/notion.js blocks append <id-or-url> [--after <block-id>] [--content <json>]
   node scripts/notion.js blocks update <block-id> [--content <json>]
   node scripts/notion.js blocks delete <block-id>
-  node scripts/notion.js db resolve <database-id>
-  node scripts/notion.js db query <data-source-id> [--filter <json|->] [--sort <s>] [--limit N] [--start-cursor <c>]
+  node scripts/notion.js db resolve <database-id> [--json]
+  node scripts/notion.js db query <data-source-id> [--filter <json|->] [--sort <s>] [--limit N] [--start-cursor <c>] [--json]
   node scripts/notion.js comment list <id-or-url> [--json]
   node scripts/notion.js comment add <id-or-url> [--markdown <text>]
   node scripts/notion.js search <query...> [--limit N] [--json]
-  node scripts/notion.js files list
-  node scripts/notion.js files get <upload-id>
-  node scripts/notion.js files create <path> | files create --external-url <url>
+  node scripts/notion.js files list [--json]
+  node scripts/notion.js files get <upload-id> [--json]
+  node scripts/notion.js files create <path> [--filename <name>] [--content-type <mime>] [--json]
+  node scripts/notion.js files create --external-url <url> [--json]
   node scripts/notion.js api <method> <path> [--content <json>]
   node scripts/notion.js exec [--script '...'] [--timeout 30000]
 
-blocks append/update read children/payload JSON from stdin if --content omitted.
+blocks append/update read children/payload JSON from stdin if --content is omitted or "-".
 Search as the user (ranked, beyond PAT visibility): node scripts/notion-mcp.mjs search <query>
 
-Page create/update read markdown from stdin if --content omitted.
-\`api\` reads JSON body from stdin if --content omitted.
+Page create/update read markdown from stdin if --content is omitted or "-".
+\`api\` reads JSON body from stdin if --content is omitted or "-".
+db and files print ntn's tab-separated text; --json prints JSON.
 
 Auth: handled by ntn (\`ntn login\`). Default workspace from ntn config.
 Override per-call with: NOTION_WORKSPACE_ID=<uuid> node scripts/notion.js ...
@@ -261,27 +273,33 @@ async function cmdPage(opts, positional) {
 
 async function cmdFiles(opts, positional) {
   const sub = positional[0];
+  const json = !!opts.json;
   if (sub === 'list') {
-    const out = await ntn.filesList();
+    const out = await ntn.filesList({ json });
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
     return;
   }
   if (sub === 'get') {
     const id = positional[1];
     if (!id) throw new Error('Usage: files get <upload-id>');
-    const out = await ntn.filesGet(id);
+    const out = await ntn.filesGet(id, { json });
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
     return;
   }
   if (sub === 'create') {
     if (opts.externalUrl) {
-      const out = await ntn.filesCreate({ externalUrl: opts.externalUrl });
+      const out = await ntn.filesCreate({ externalUrl: opts.externalUrl, json });
       console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
       return;
     }
     const filePath = positional[1];
     if (!filePath) throw new Error('Usage: files create <path> | files create --external-url <url>');
-    const out = await ntn.filesCreate({ filePath });
+    const out = await ntn.filesCreate({
+      filePath,
+      filename: opts.filename,
+      contentType: opts.contentType,
+      json,
+    });
     console.log(typeof out === 'string' ? out : JSON.stringify(out, null, 2));
     return;
   }
@@ -356,7 +374,8 @@ async function cmdDb(opts, positional) {
   if (sub === 'resolve') {
     const dbId = positional[1];
     if (!dbId) throw new Error('Usage: db resolve <database-id>');
-    console.log(await ntn.datasourcesResolve(dbId));
+    const res = await ntn.datasourcesResolve(dbId, { json: !!opts.json });
+    console.log(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
     return;
   }
   if (sub === 'query') {
@@ -369,6 +388,7 @@ async function cmdDb(opts, positional) {
       startCursor: opts.startCursor,
       sort: opts.sort,
       filter,
+      json: !!opts.json,
     });
     console.log(typeof res === 'string' ? res : JSON.stringify(res, null, 2));
     return;
@@ -413,7 +433,7 @@ async function cmdApi(opts, positional) {
     throw new Error('Usage: api <method> <path> [--content <json>]');
   }
   let body = null;
-  if (opts.content !== undefined && opts.content !== '') {
+  if (opts.content !== undefined && opts.content !== '' && opts.content !== '-') {
     body = opts.content;
   } else if (!process.stdin.isTTY) {
     const stdin = await readStdinText();
