@@ -54,7 +54,7 @@ link "$REPO_DIR/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github slack librarian uv summarize mermaid sentry notion pr-summary codemagic unslop technical-writing html-report youtube-transcript)
+CC_SKILLS=(commit github slack librarian uv summarize mermaid sentry notion pr-summary codemagic unslop technical-writing html-report youtube-transcript writing-for-agents)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
@@ -63,6 +63,20 @@ echo "==> Skills → ~/.pi/agent/skills/ (pi agent)"
 PI_SKILLS=(google-workspace librarian mermaid notion sentry codemagic youtube-transcript)
 for name in "${PI_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.pi/agent/skills/$name"
+done
+
+echo "==> Commands → ~/.local/bin/"
+for cmd in "$REPO_DIR"/bin/*; do
+  [ -x "$cmd" ] || continue
+  link "$cmd" "$HOME/.local/bin/$(basename "$cmd")"
+done
+# Skill scripts exposed as short commands (command=path under skills/).
+SKILL_CMDS=(
+  slack=slack/scripts/slack.mjs
+  notion=notion/scripts/notion.js
+)
+for entry in "${SKILL_CMDS[@]}"; do
+  link "$REPO_DIR/skills/${entry#*=}" "$HOME/.local/bin/${entry%%=*}"
 done
 
 echo "==> Output styles → ~/.claude/output-styles/ (Claude Code)"
@@ -90,6 +104,7 @@ CC_PROMPTS=(
   edit-article
   extract_wisdom
   handoff
+  to-questionnaire
 )
 for name in "${CC_PROMPTS[@]}"; do
   link "$REPO_DIR/prompts/$name.md" "$HOME/.claude/commands/$name.md"

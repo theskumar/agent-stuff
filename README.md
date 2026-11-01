@@ -36,6 +36,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | [`trust-github-repos.ts`](extensions/trust-github-repos.ts) | Auto-trust checkouts whose git origin is under `fueled`, `theskumar`, or `earendil-works` so `project_trust` never prompts for them (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), owner allowlist customized) |
 | [`todos.ts`](extensions/todos.ts) | `/todos` visual todo manager backed by markdown files in `.pi/todos/` |
 | [`no-sleep.ts`](extensions/no-sleep.ts) | Prevent macOS sleep via `caffeinate` while agent runs; `/no-sleep` toggle (source: [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff)) |
+| [`edit-guard.ts`](extensions/edit-guard.ts) | Warns (never blocks) when bash edits a file through Python/`sed -i` or reads one with `cat`/`head`/`sed -n`; points to `edit`/`read`. Max 3 warnings per kind per session. `PI_EDIT_GUARD=0` disables |
 | [`inline-bash.ts`](extensions/inline-bash.ts) | Expand `!{cmd}` patterns in user prompts before they reach the agent (source: [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts)) |
 | [`split-fork.ts`](extensions/split-fork.ts) | `/split-fork [-d] [prompt]` forks the current session into a new pi process in a new tmux window or herdr tab (backend auto-detected; `-d` keeps focus here) (adapted from [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff), Ghostty → tmux/herdr) |
 | [`handoff.ts`](extensions/handoff.ts) | `/handoff <goal>` distills the session into a compact hot-state-first prompt and starts a fresh session seeded with it (`PI_HANDOFF_MODEL`, `PI_HANDOFF_MAX_TOKENS`; adapted from [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions), tuned for mid-task continuation) |
@@ -88,19 +89,31 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`google-workspace`](skills/google-workspace/) | Access Google Workspace APIs (Drive, Docs, Sheets, Calendar, Gmail, Chat, People) via OAuth |
 | [`grill-me`](skills/grill-me/) | Stress-test a plan via relentless questioning |
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts (GitHub, GitLab, Codeberg, Bitbucket, sourcehut, self-hosted) |
-| [`mermaid`](skills/mermaid/) | Validate Mermaid diagrams via official CLI |
+| [`explainer-video`](skills/explainer-video/) | Narrated explainer videos from docs: TTS, animated HTML scenes, Chrome render, ffmpeg |
+| [`mermaid`](skills/mermaid/) | Validate and preview Mermaid diagrams with Pele (no browser) |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`slack`](skills/slack/) | Read and search Slack (catchup, threads, users) and create editable drafts through the Claude.ai Slack connector, no bot token |
 | [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `fetch_content` for URLs |
-| [`tmux`](skills/tmux/) | Remote control tmux sessions for interactive CLIs |
 | [`uv`](skills/uv/) | uv project setup, build/publish, PEP-723 |
 | [`diagnosing-bugs`](skills/diagnosing-bugs/) | Structured diagnosis loop for hard bugs and performance regressions |
+| [`writing-for-agents`](skills/writing-for-agents/) | Writing skills, prompts and AGENTS.md for agents: context pointers, information hierarchy, pruning. `SETUP.md` maps where each document lives here (adapted from [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-for-agents)) |
 | [`web-browser`](skills/web-browser/) | Browser automation via CDP: accessibility-tree actions (`ax.js`), Obscura scraping, and `agent.mjs` to delegate a web task to a cheap inner agent |
 | [`unslop`](skills/unslop/) | Cut AI tells from prose and add human voice; takes precedence over other style guidance |
 | [`technical-writing`](skills/technical-writing/) | Formal doc standard (Diátaxis, Google style, STE, Global English) for docs/RFCs/PRs/commits; composes with `unslop` (source: [cursor/plugins](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md)) |
 | [`youtube-transcript`](skills/youtube-transcript/) | Fetch timestamped YouTube video transcripts via `youtube-transcript-plus` (source: [badlogic/pi-skills](https://github.com/badlogic/pi-skills/tree/main/youtube-transcript)) |
+
+## Commands
+
+Short commands linked into `~/.local/bin` by `install.sh`: every executable in [`bin/`](bin/), plus the skill scripts listed in `SKILL_CMDS`.
+
+| Command | Purpose |
+|---|---|
+| [`amazon`](bin/amazon) | `amazon search <query> [--min --max --limit]` and `amazon product <asin-or-url>`: Amazon.in listings, specs and top reviews as JSON via Obscura (`AMAZON_DOMAIN` to switch market) |
+| [`ci-wait`](bin/ci-wait) | Wait for a PR's checks, then print the failing job logs; exit 1 on failure |
+| `slack` | [`skills/slack/scripts/slack.mjs`](skills/slack/scripts/slack.mjs) |
+| `notion` | [`skills/notion/scripts/notion.js`](skills/notion/scripts/notion.js) |
 
 ## Prompts
 

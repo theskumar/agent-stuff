@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+// amazon: Amazon.in search results and product pages as JSON, via Obscura.
+//   amazon search <query...> [--min RUPEES] [--max RUPEES] [--limit N]
+//   amazon product <asin-or-url>
+// Set AMAZON_DOMAIN=amazon.com to switch market.
+import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const OBSCURA = join(homedir(), ".agents/skills/web-browser/scripts/obscura.js");
+const DOMAIN = process.env.AMAZON_DOMAIN || "amazon.in";
+
+function usage(code = 1) {
+  console.error("usage: amazon search <query...> [--min RUPEES] [--max RUPEES] [--limit N]\n       amazon product <asin-or-url>");
+  process.exit(code);
+}
+
+function evalPage(url, js) {
+  const out = execFileSync("node", [OBSCURA, "eval", url, js, "--wait-until", "load", "--timeout", "60"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  const text = out.trim();
+  try {
+    const v = JSON.parse(text);
+    return typeof v === "string" ? JSON.parse(v) : v;
+  } catch {
+    return text;
+  }
+}
+
+// String.raw keeps the regex backslashes in the page scripts intact.
+const SEARCH_JS = (limit) => String.raw`JSON.stringify([...document.querySelectorAll('div[data-component-type="s-search-result"]')].map(it => {
+  const link = it.querySelector("h2 a, a.a-link-normal")?.getAttribute("href") || "";
+  return {
+    asin: it.getAttribute("data-asin") || null,
+    title: it.querySelector("h2 span")?.textContent?.trim()?.slice(0, 140),
+    price: it.querySelector(".a-price .a-offscreen")?.textContent || null,
+    mrp: it.querySelector('.a-price.a-text-price[data-a-strike="true"] .a-offscreen')?.textContent || null,
+    rating: it.querySelector(".a-icon-alt")?.textContent?.split(" ")[0] || null,
+    reviews: (it.querySelector('a[href*="customerReviews"] span') || it.querySelector("span.a-size-base.s-underline-text"))?.textContent?.trim() || null,
+    sponsored: !!it.querySelector(".puis-sponsored-label-text, .s-sponsored-label-text") || link.includes("sspa"),
+  };
+}).filter(x => x.title && x.asin).slice(0, ${limit}))`;
+
+const PRODUCT_JS = String.raw`(() => {
+  const t = (s) => document.querySelector(s)?.textContent?.trim()?.replace(/\s+/g, " ") || null;
+  const specs = {};
+  for (const row of document.querySelectorAll("#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr, #detailBullets_feature_div li, .prodDetTable tr")) {
+    const k = (row.querySelector("th, .a-text-bold")?.textContent || "").replace(/[\s:\u200e\u200f]+/g, " ").trim();
+    const v = (row.querySelector("td") || row.querySelector(".a-text-bold")?.nextElementSibling)?.textContent?.replace(/[\s\u200e\u200f]+/g, " ").trim();
+    if (k && v && !specs[k]) specs[k] = v.slice(0, 200);
+  }
+  return JSON.stringify({
+    title: t("#productTitle"),
+    price: t(".priceToPay .a-offscreen") || t("#corePrice_feature_div .a-offscreen") || t(".a-price .a-offscreen"),
+    rating: document.querySelector("#acrPopover")?.title || null,
+    ratings: t("#acrCustomerReviewText"),
+    availability: t("#availability span") || t("#availability"),
+    bullets: [...document.querySelectorAll("#feature-bullets li span.a-list-item")].map(e => e.textContent.trim()).filter(Boolean).slice(0, 10),
+    specs,
+    reviews: [...document.querySelectorAll('div[data-hook="review"]')].slice(0, 8).map(r => r.innerText.replace(/\n+/g, " | ").slice(0, 400)),
+  });
+})()`;
+
+const [cmd, ...rest] = process.argv.slice(2);
+if (!cmd || cmd === "-h" || cmd === "--help") usage(cmd ? 0 : 1);
+
+if (cmd === "search") {
+  const opts = { limit: 16 };
+  const words = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i];
+    if (a === "--min" || a === "--max" || a === "--limit") opts[a.slice(2)] = Number(rest[++i]);
+    else words.push(a);
+  }
+  if (!words.length) usage();
+  let url = `https://www.${DOMAIN}/s?k=${encodeURIComponent(words.join(" "))}`;
+  if (opts.min || opts.max) url += `&rh=p_36%3A${(opts.min || 0) * 100}-${opts.max ? opts.max * 100 : ""}`;
+  const items = evalPage(url, SEARCH_JS(opts.limit));
+  const out = Array.isArray(items) ? items.map((x) => ({ ...x, url: `https://www.${DOMAIN}/dp/${x.asin}` })) : items;
+  console.log(JSON.stringify(out, null, 1));
+} else if (cmd === "product") {
+  const arg = rest[0] || usage();
+  const asin = arg.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/)?.[1] || (/^[A-Z0-9]{10}$/.test(arg) ? arg : null);
+  if (!asin) usage();
+  const url = `https://www.${DOMAIN}/dp/${asin}`;
+  const data = evalPage(url, PRODUCT_JS);
+  console.log(JSON.stringify(typeof data === "object" ? { asin, url, ...data } : data, null, 1));
+} else usage();
