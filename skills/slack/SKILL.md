@@ -68,7 +68,7 @@ Slack MCP does **not** expose unread markers/counts. Never claim results are unr
 
 ## Message drafts
 
-Drafts are a first-class workflow. `draft` creates an editable Slack draft and does **not** send it. Resolve the destination ID, show exact draft text, get confirmation, then create it:
+`draft` creates an editable draft in Slack and never sends it, so it needs no confirmation. When the user asks to draft a Slack message, reply, or DM, create the draft in Slack. Resolve the destination ID, run `draft`, then show the destination and the exact text:
 
 ```bash
 # Channel draft
@@ -79,7 +79,7 @@ printf '%s' 'Exact approved multiline draft' | \
   node "$SLACK_CLI" draft C123 - --thread 1784801848.744239 --confirm-write
 ```
 
-If user asks only to compose wording, return proposed text without creating anything in Slack. Use `draft` only when they ask to create/save the draft in Slack.
+Return text in chat only when the user asks for wording alone, for example "suggest wording" or "what should I say".
 
 ### Draft formatting
 
@@ -123,7 +123,7 @@ Default output is readable text. `--json` returns normalized JSON. Use `--timeou
 
 ## Writes: confirmation required
 
-Before any send, schedule, reaction, draft, canvas create/update, or unknown non-read tool:
+Before any send, schedule, reaction, canvas create/update, or unknown non-read tool (drafts excepted, see Message drafts):
 
 1. Show exact proposed action, destination, and content.
 2. Obtain explicit user confirmation.
