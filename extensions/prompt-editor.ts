@@ -640,6 +640,14 @@ async function storeSelectionIntoMode(
   await persistRuntime(pi, ctx);
 }
 
+/** True when pi was started with `--model <pattern>`. Pi's CLI parser accepts only
+ *  that form (no `-m`, and `--model=x` is not the model flag). */
+function modelGivenOnCommandLine(): boolean {
+  const args = process.argv.slice(2);
+  const index = args.indexOf("--model");
+  return index !== -1 && index + 1 < args.length;
+}
+
 async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string): Promise<void> {
   await ensureRuntime(pi, ctx);
 
@@ -1846,9 +1854,10 @@ export default function (pi: ExtensionAPI) {
     const isFreshSession = branch.every(
       (entry) => entry.type === "model_change" || entry.type === "thinking_level_change",
     );
-    if (isFreshSession) {
+    if (isFreshSession && !modelGivenOnCommandLine()) {
       // Pi records the default model/thinking level before session_start, even for a
       // fresh session. Ignore those initialization entries and apply the last mode.
+      // An explicit `pi --model X` wins over the remembered mode.
       await applyMode(pi, ctx, runtime.data.currentMode);
     } else {
       const inferred = inferModeFromSelection(ctx, pi, runtime.data);
