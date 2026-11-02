@@ -16,7 +16,6 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 
 | Extension | Purpose |
 |---|---|
-| [`subscription-limits/`](extensions/subscription-limits/) | Claude and Codex quota badges on the footer path row; `/limits` shows account matching, all buckets, resets, and paid usage |
 | [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
 | [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
 | [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history, low-battery indicator (`.pi/battery.json` / `PI_BATTERY_THRESHOLD` / `PI_BATTERY_DISABLE`) |
