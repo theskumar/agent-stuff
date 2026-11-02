@@ -1,0 +1,491 @@
+#!/usr/bin/env node
+// kite: read-only Zerodha portfolio via Zerodha's hosted Kite MCP server (mcp.kite.trade).
+//   kite login                      new session; prints the Kite login URL to open in a browser
+//   kite status                     user_id, user_name, broker
+//   kite holdings|mf|positions|margins|orders|trades|gtts    JSON, all pages
+//   kite ltp|quote|ohlc <EXCH:SYMBOL...>
+//   kite hist <token|EXCH:SYMBOL> <from> <to> [interval] [--continuous] [--oi]
+//   kite search <query...> [--on id|name|isin|tradingsymbol|underlying] [--limit N]
+//   kite call <allowlisted-tool> [json-args]
+//   kite snapshot                   holdings+mf+positions+margins → ~/.local/share/kite/snapshots/<account>/<date>.json
+//   kite tools                      print the read-only allowlist
+// --account NAME (env KITE_ACCOUNT, default saurabh): one session file per account.
+// One login per day: the Kite token dies at 6am IST; the MCP session lasts 12h.
+// Read-only: only ALLOWLIST tool names ever reach the server; order and GTT tools are refused.
+// Exit codes: 0 ok, 1 error, 2 not logged in / session expired, 3 tool refused.
+import { mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+const MCP_URL = "https://mcp.kite.trade/mcp";
+const PROTOCOL_VERSION = "2025-03-26";
+
+// Hard allowlist. place_order, modify_order, cancel_order, place_gtt_order,
+// modify_gtt_order and delete_gtt_order are deliberately absent. Do not extend
+// this list with anything that writes to the account.
+const ALLOWLIST = Object.freeze([
+  "login",
+  "get_profile",
+  "get_margins",
+  "get_holdings",
+  "get_positions",
+  "get_mf_holdings",
+  "get_orders",
+  "get_trades",
+  "get_order_history",
+  "get_order_trades",
+  "get_gtts",
+  "get_ltp",
+  "get_quotes",
+  "get_ohlc",
+  "get_historical_data",
+  "search_instruments",
+]);
+const isAllowed = (name) => typeof name === "string" && ALLOWLIST.includes(name);
+// JSON-RPC methods this client may send. No tools/list, no resources, no prompts.
+const METHODS = Object.freeze(["initialize", "notifications/initialized", "tools/call"]);
+
+const LIST_CMDS = {
+  holdings: "get_holdings",
+  mf: "get_mf_holdings",
+  positions: "get_positions",
+  orders: "get_orders",
+  trades: "get_trades",
+  gtts: "get_gtts",
+};
+const PRICE_CMDS = { ltp: "get_ltp", quote: "get_quotes", ohlc: "get_ohlc" };
+const INTERVALS = ["minute", "3minute", "5minute", "10minute", "15minute", "30minute", "60minute", "day"];
+const PAGE_SIZE = 500;
+
+const USAGE = `usage: kite [--account NAME] <command> [args]
+
+  login                       new session; prints the Kite login URL to open in a browser
+  status                      user_id, user_name, broker
+  holdings | mf | positions | margins | orders | trades | gtts
+                              JSON from the matching get_* tool (all pages)
+  ltp | quote | ohlc <EXCH:SYMBOL...>
+  hist <token|EXCH:SYMBOL> <from> <to> [interval] [--continuous] [--oi]
+                              dates YYYY-MM-DD or "YYYY-MM-DD HH:MM:SS"; interval default day
+                              (${INTERVALS.join(", ")})
+  search <query...> [--on id|name|isin|tradingsymbol|underlying] [--limit N]   (default limit 50)
+  call <tool> [json-args]     any allowlisted tool (see: kite tools)
+  snapshot                    holdings+mf+positions+margins → ~/.local/share/kite/snapshots/<account>/<date>.json
+  tools                       print the read-only tool allowlist
+
+--account NAME   account whose session to use (env KITE_ACCOUNT, default saurabh)
+Exit codes: 0 ok, 1 error, 2 not logged in / session expired, 3 tool refused (not read-only).`;
+
+class NotLoggedIn extends Error {}
+class Refused extends Error {}
+
+// Never let a raw MCP session id reach the terminal.
+const redact = (s) => String(s).replace(/kitemcp-[0-9a-f-]{8,}/gi, "kitemcp-<redacted>");
+const die = (msg, code = 1) => {
+  console.error(redact(msg));
+  process.exit(code);
+};
+
+// ---- args ----
+const argv = process.argv.slice(2);
+let account = process.env.KITE_ACCOUNT || "saurabh";
+const args = [];
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === "--account") {
+    if (i + 1 >= argv.length) die("--account needs a name");
+    account = argv[++i];
+  } else if (a.startsWith("--account=")) account = a.slice("--account=".length);
+  else args.push(a);
+}
+if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(account)) die(`invalid account name: ${account}`);
+const LOGIN_HINT = `not logged in: run \`kite login --account ${account}\``;
+
+// ---- session file ----
+const CONFIG_DIR = join(homedir(), ".config/kite");
+const SESSION_FILE = join(CONFIG_DIR, `session-${account}.json`);
+
+function mkdirPrivate(dir) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  chmodSync(dir, 0o700);
+}
+
+function writePrivate(path, text) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text, { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, path);
+}
+
+function loadSession() {
+  let s;
+  try {
+    s = JSON.parse(readFileSync(SESSION_FILE, "utf8"));
+  } catch {
+    throw new NotLoggedIn();
+  }
+  if (!s?.session_id) throw new NotLoggedIn();
+  return s.session_id;
+}
+
+// ---- MCP transport (Streamable HTTP, JSON-RPC 2.0) ----
+let nextId = 1;
+
+async function readSse(res, id) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let found;
+  const take = (block) => {
+    const data = block
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith("data:"))
+      .map((l) => l.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data) return;
+    let msg;
+    try {
+      msg = JSON.parse(data);
+    } catch {
+      return;
+    }
+    if (msg && msg.id === id && ("result" in msg || "error" in msg)) found = msg;
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let m;
+    while (!found && (m = /\r?\n\r?\n/.exec(buf))) {
+      take(buf.slice(0, m.index));
+      buf = buf.slice(m.index + m[0].length);
+    }
+    if (found) {
+      await reader.cancel().catch(() => {});
+      return found;
+    }
+  }
+  if (buf.trim()) take(buf);
+  return found;
+}
+
+async function rpc(method, params, sid) {
+  // Defence in depth: the allowlist is enforced again at the wire.
+  if (!METHODS.includes(method)) throw new Refused(`refused: method ${method} is not used by this read-only client`);
+  if (method === "tools/call" && !isAllowed(params?.name)) throw new Refused(`refused: ${params?.name} is not in the read-only allowlist`);
+
+  const notification = method.startsWith("notifications/");
+  const body = { jsonrpc: "2.0", method, ...(params ? { params } : {}) };
+  const id = notification ? undefined : nextId++;
+  if (!notification) body.id = id;
+
+  const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+  if (sid) headers["mcp-session-id"] = sid;
+  let res;
+  try {
+    res = await fetch(MCP_URL, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(90_000) });
+  } catch (e) {
+    throw new Error(`network error talking to ${MCP_URL}: ${e.cause?.message || e.message}`);
+  }
+  if (!res.ok) {
+    const text = (await res.text().catch(() => "")).trim();
+    // Unknown, expired or terminated MCP session: 400/404 "Invalid session ID".
+    if ((res.status === 400 || res.status === 404) && /session/i.test(text)) throw new NotLoggedIn();
+    throw new Error(`HTTP ${res.status} from Kite MCP: ${text.slice(0, 300)}`);
+  }
+  if (notification) {
+    await res.body?.cancel().catch(() => {});
+    return { res };
+  }
+  const ct = res.headers.get("content-type") || "";
+  const msg = ct.includes("text/event-stream") ? await readSse(res, id) : await res.json();
+  if (!msg) throw new Error(`no response to ${method} from Kite MCP`);
+  if (msg.error) {
+    const text = msg.error.message || JSON.stringify(msg.error);
+    if (/session|log ?in/i.test(text)) throw new NotLoggedIn();
+    throw new Error(`Kite MCP error: ${text}`);
+  }
+  return { res, result: msg.result };
+}
+
+async function newSession() {
+  const { res } = await rpc("initialize", {
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: {},
+    clientInfo: { name: "kite-cli", version: "1.0.0" },
+  });
+  const sid = res.headers.get("mcp-session-id");
+  if (!sid) throw new Error("Kite MCP did not return an mcp-session-id header");
+  await rpc("notifications/initialized", undefined, sid);
+  return sid;
+}
+
+const resultText = (result) =>
+  (result?.content || [])
+    .filter((c) => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+
+function parseMaybeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+// Raw tool call. Returns parsed JSON (or text); throws on tool errors.
+async function callRaw(sid, name, args = {}) {
+  if (!isAllowed(name)) throw new Refused(`refused: ${name} is not in the read-only allowlist`);
+  const { result } = await rpc("tools/call", { name, arguments: args }, sid);
+  const text = resultText(result);
+  if (result?.isError) {
+    const err = new Error(text || `${name} failed`);
+    err.toolError = true;
+    throw err;
+  }
+  return parseMaybeJson(text);
+}
+
+// Tool call with session-error mapping. The server reports "Please log in first"
+// only on a fresh session; after `login` has run, an unauthenticated or expired
+// Kite token surfaces as a generic "Failed to ..." text. Probe get_profile to
+// tell that apart from a real failure (bad symbol, Kite outage).
+async function call(sid, name, args = {}) {
+  try {
+    return await callRaw(sid, name, args);
+  } catch (e) {
+    if (!e.toolError) throw e;
+    if (/log ?in|session/i.test(e.message)) throw new NotLoggedIn();
+    if (name === "get_profile" && /^Failed to/i.test(e.message)) throw new NotLoggedIn();
+    if (/^Failed to/i.test(e.message) && name !== "search_instruments") {
+      try {
+        await callRaw(sid, "get_profile");
+      } catch (p) {
+        if (p.toolError || p instanceof NotLoggedIn) throw new NotLoggedIn();
+      }
+    }
+    throw new Error(`${name}: ${e.message}`);
+  }
+}
+
+// Paginated tools return a bare array without `limit`, and
+// { data, pagination: { from, limit, total, has_more, returned } } with it.
+async function callAll(sid, name, extra = {}) {
+  const out = [];
+  let from = 0;
+  for (let page = 0; page < 1000; page++) {
+    const r = await call(sid, name, { ...extra, from, limit: PAGE_SIZE });
+    if (Array.isArray(r)) return from === 0 ? r : out.concat(r);
+    if (r && Array.isArray(r.data) && r.pagination) {
+      out.push(...r.data);
+      if (!r.pagination.has_more || r.data.length === 0) return out;
+      from += r.data.length;
+      continue;
+    }
+    return r ?? out;
+  }
+  throw new Error(`${name}: too many pages`);
+}
+
+const print = (v) => console.log(typeof v === "string" ? v : JSON.stringify(v, null, 2));
+
+// ---- helpers for market data ----
+function instrumentsArg(rest) {
+  const list = rest.flatMap((a) => a.split(",")).map((s) => s.trim().toUpperCase()).filter(Boolean);
+  if (!list.length) die("give one or more instruments as EXCH:SYMBOL, e.g. NSE:INFY");
+  for (const i of list) if (!/^[A-Z]+:.+/.test(i)) die(`instrument must be EXCH:SYMBOL, got ${i}`);
+  return list;
+}
+
+function dateArg(s, end) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s} ${end ? "23:59:59" : "00:00:00"}`;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    const v = s.replace("T", " ");
+    return v.length === 16 ? `${v}:00` : v;
+  }
+  die(`bad date ${s}: use YYYY-MM-DD or "YYYY-MM-DD HH:MM:SS"`);
+}
+
+async function resolveToken(sid, inst) {
+  if (/^\d+$/.test(inst)) return Number(inst);
+  const id = inst.toUpperCase();
+  if (!id.includes(":")) die(`instrument must be a numeric token or EXCH:SYMBOL, got ${inst}`);
+  const r = await call(sid, "search_instruments", { query: id, filter_on: "id", limit: 50 });
+  const list = Array.isArray(r) ? r : r?.data || [];
+  const hit = list.find((x) => String(x.id).toUpperCase() === id);
+  if (!hit) die(`no instrument with id ${id}; try: kite search ${id.split(":")[1]}`);
+  return hit.instrument_token;
+}
+
+// ---- snapshot summary ----
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
+function summarize(rows, qtyOf) {
+  let invested = 0;
+  let current = 0;
+  for (const h of rows) {
+    const q = qtyOf(h);
+    invested += q * num(h.average_price);
+    current += q * num(h.last_price);
+  }
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return { count: rows.length, invested: r2(invested), current: r2(current), pnl: r2(current - invested) };
+}
+const inr = (x) => `₹${x.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const line = (label, s, noun) => {
+  const pct = s.invested ? ` (${s.pnl >= 0 ? "+" : ""}${((s.pnl / s.invested) * 100).toFixed(2)}%)` : "";
+  return `${label}: ${s.count} ${noun}, invested ${inr(s.invested)}, current ${inr(s.current)}, P&L ${inr(s.pnl)}${pct}`;
+};
+const istDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+// ---- commands ----
+async function main() {
+  const [cmd, ...rest] = args;
+  if (cmd === "-h" || cmd === "--help" || cmd === "help") {
+    console.log(USAGE);
+    return;
+  }
+  if (!cmd) die(USAGE);
+
+  if (cmd === "tools") {
+    console.log(ALLOWLIST.join("\n"));
+    return;
+  }
+
+  // Enforce the allowlist before touching the session file or the network.
+  if (cmd === "call") {
+    const [name, json] = rest;
+    if (!name) die("usage: kite call <allowlisted-tool> [json-args]");
+    if (!isAllowed(name)) throw new Refused(`refused: ${name} is not in the read-only allowlist (see: kite tools)`);
+    let a = {};
+    if (json !== undefined) {
+      try {
+        a = JSON.parse(json);
+      } catch {
+        die(`json-args is not valid JSON: ${json}`);
+      }
+      if (!a || typeof a !== "object" || Array.isArray(a)) die("json-args must be a JSON object");
+    }
+    print(await call(loadSession(), name, a));
+    return;
+  }
+
+  if (cmd === "login") {
+    const sid = await newSession();
+    const text = resultText((await rpc("tools/call", { name: "login", arguments: {} }, sid)).result);
+    const urls = [...text.matchAll(/https?:\/\/[^\s)\]>"']+/g)].map((m) => m[0]);
+    const url = urls.find((u) => /^https:\/\/(mcp\.kite\.trade|kite\.zerodha\.com|kite\.trade)\//.test(u));
+    if (!url) die(`login: no Kite login URL in the server's reply:\n${text.slice(0, 500)}`);
+    mkdirPrivate(CONFIG_DIR);
+    writePrivate(SESSION_FILE, JSON.stringify({ account, session_id: sid, created_at: new Date().toISOString() }, null, 2) + "\n");
+    console.log(url);
+    // The URL embeds the MCP session id (signed, not encrypted): it is a credential until 6am IST.
+    console.error(`Open this link in a browser within 5 minutes and log in to Zerodha as ${account}; don't share it, it carries the session.`);
+    return;
+  }
+
+  if (cmd === "status") {
+    const p = await call(loadSession(), "get_profile");
+    print({ user_id: p?.user_id, user_name: p?.user_name, broker: p?.broker });
+    return;
+  }
+
+  if (cmd === "margins") {
+    print(await call(loadSession(), "get_margins"));
+    return;
+  }
+
+  if (LIST_CMDS[cmd]) {
+    print(await callAll(loadSession(), LIST_CMDS[cmd]));
+    return;
+  }
+
+  if (PRICE_CMDS[cmd]) {
+    const instruments = instrumentsArg(rest);
+    print(await call(loadSession(), PRICE_CMDS[cmd], { instruments }));
+    return;
+  }
+
+  if (cmd === "hist") {
+    const flags = rest.filter((a) => a.startsWith("--"));
+    const pos = rest.filter((a) => !a.startsWith("--"));
+    for (const f of flags) if (f !== "--continuous" && f !== "--oi") die(`unknown flag ${f}`);
+    const [inst, from, to, interval = "day"] = pos;
+    if (!inst || !from || !to) die("usage: kite hist <token|EXCH:SYMBOL> <from> <to> [interval] [--continuous] [--oi]");
+    if (!INTERVALS.includes(interval)) die(`interval must be one of: ${INTERVALS.join(", ")}`);
+    const a = { from_date: dateArg(from, false), to_date: dateArg(to, true), interval };
+    if (flags.includes("--continuous")) a.continuous = true;
+    if (flags.includes("--oi")) a.oi = true;
+    const sid = loadSession();
+    a.instrument_token = await resolveToken(sid, inst);
+    print(await call(sid, "get_historical_data", a));
+    return;
+  }
+
+  if (cmd === "search") {
+    const words = [];
+    let on;
+    let limit = 50;
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--on") on = rest[++i];
+      else if (rest[i] === "--limit") limit = Number(rest[++i]);
+      else words.push(rest[i]);
+    }
+    if (!words.length) die("usage: kite search <query...> [--on id|name|isin|tradingsymbol|underlying] [--limit N]");
+    if (on && !["id", "name", "isin", "tradingsymbol", "underlying"].includes(on)) die("--on must be id, name, isin, tradingsymbol or underlying");
+    if (!Number.isInteger(limit) || limit < 1) die("--limit must be a positive integer");
+    const a = { query: words.join(" "), limit };
+    if (on) a.filter_on = on;
+    const r = await call(loadSession(), "search_instruments", a);
+    if (r?.pagination && Array.isArray(r.data)) {
+      print(r.data);
+      if (r.pagination.has_more) console.error(`showing ${r.data.length} of ${r.pagination.total}; raise --limit for more`);
+    } else print(r);
+    return;
+  }
+
+  if (cmd === "snapshot") {
+    const sid = loadSession();
+    const profile = await call(sid, "get_profile"); // also proves the login is live
+    const [holdings, mf, positions, margins] = await Promise.all([
+      callAll(sid, "get_holdings"),
+      callAll(sid, "get_mf_holdings"),
+      callAll(sid, "get_positions"),
+      call(sid, "get_margins"),
+    ]);
+    const hs = Array.isArray(holdings) ? holdings : [];
+    const ms = Array.isArray(mf) ? mf : [];
+    const summary = {
+      // Equity quantity excludes T1 shares bought in the last session; add them back.
+      equity: summarize(hs, (h) => num(h.quantity) + num(h.t1_quantity)),
+      mf: summarize(ms, (h) => num(h.quantity)),
+    };
+    const dir = join(homedir(), ".local/share/kite/snapshots", account);
+    mkdirPrivate(join(homedir(), ".local/share/kite"));
+    mkdirPrivate(join(homedir(), ".local/share/kite/snapshots"));
+    mkdirPrivate(dir);
+    const path = join(dir, `${istDate()}.json`);
+    const snap = {
+      account,
+      user_id: profile?.user_id,
+      taken_at: new Date().toISOString(),
+      summary,
+      holdings,
+      mf_holdings: mf,
+      positions,
+      margins,
+    };
+    writePrivate(path, JSON.stringify(snap, null, 2) + "\n");
+    console.log(path);
+    console.log(line("equity", summary.equity, "holdings"));
+    console.log(line("mf", summary.mf, "funds"));
+    return;
+  }
+
+  die(`unknown command: ${cmd}\n\n${USAGE}`);
+}
+
+main().catch((e) => {
+  if (e instanceof NotLoggedIn) die(LOGIN_HINT, 2);
+  if (e instanceof Refused) die(e.message, 3);
+  die(`kite: ${e.message}`);
+});

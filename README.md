@@ -112,6 +112,7 @@ Short commands linked into `~/.local/bin` by `install.sh`: every executable in [
 |---|---|
 | [`amazon`](bin/amazon) | `amazon search <query> [--min --max --limit]` and `amazon product <asin-or-url>`: Amazon.in listings, specs and top reviews as JSON via Obscura (`AMAZON_DOMAIN` to switch market) |
 | [`ci-wait`](bin/ci-wait) | Wait for a PR's checks, then print the failing job logs; exit 1 on failure |
+| [`kite`](bin/kite) | Read-only Zerodha portfolio via the hosted Kite MCP server: `kite login`, `status`, `holdings`/`mf`/`positions`/`margins`, `ltp`/`quote`/`hist`/`search`, `snapshot`; order and GTT tools are refused (`--account NAME`, one login per day) |
 | `slack` | [`skills/slack/scripts/slack.mjs`](skills/slack/scripts/slack.mjs) |
 | `notion` | [`skills/notion/scripts/notion.js`](skills/notion/scripts/notion.js) |
 
