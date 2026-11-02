@@ -1,50 +1,21 @@
 /**
- * Tree Fast Summary Extension
+ * Tree Fast Summary
  *
- * What it is:
- *   pi's `/tree` branch summarization normally runs on the currently active
- *   session model. This extension reroutes that summary call to a cheap,
- *   fast model configured via the `fast` mode in `modes.json` (resolved
- *   project-first, then global), so navigating the tree doesn't burn your
- *   expensive main model. `/compact` is NOT touched by this extension and
- *   continues to use the active session model.
+ * Runs `/tree` branch summaries on a cheap model instead of the session model.
+ * `/compact` is not touched (pi-blackhole owns compaction).
  *
- *   Reuses pi's exported `generateBranchSummary`, so the structured output
- *   format, file tracking, and preamble are identical to the built-in — only
- *   the model swaps out, and we append a couple of extra guideline lines to
- *   the summarization instructions (see EXTRA_TREE_GUIDELINES). Falls back
- *   to `FALLBACK_FAST_MODEL` if no usable `fast` mode is found.
+ * Model: the `fast` mode in `modes.json`, read from the project
+ * `.pi/modes.json` first, then `~/.pi/agent/modes.json`. Falls back to
+ * FALLBACK_FAST_MODEL when neither has a usable entry. Set it with `/mode` or:
  *
- * Use cases:
- *   - Heavy `/tree` navigators who don't want to pay GPT-5 / Opus rates for
- *     branch summaries.
- *   - Consistent fast-path `/tree` summarization across projects via a
- *     single `~/.pi/agent/modes.json` `fast` entry.
+ *   "fast": { "provider": "claude-bridge", "modelId": "claude-haiku-4-5" }
  *
- * Common usage patterns:
- *   - Add a `fast` mode via `/mode` (Configure modes…) or directly in
- *     modes.json — see below.
- *   - Use `/tree` as normal; branch summaries automatically use the fast
- *     model.
- *   - Override per-project by adding `fast` to `.pi/modes.json`.
+ * Summary: pi's own `generateBranchSummary`, so the format, file tracking and
+ * preamble match the built-in. EXTRA_TREE_GUIDELINES is appended through
+ * `customInstructions`.
  *
- * The model is NOT hard-coded here. It is read from the `fast` mode in
- * `modes.json` (the same file the modes/prompt-editor extension manages),
- * resolving the project `.pi/modes.json` first and then the global
- * `~/.pi/agent/modes.json`. If no usable `fast` mode is found we fall back to
- * FALLBACK_FAST_MODEL below.
- *
- * Add a `fast` mode via `/mode` (Configure modes…) or directly in modes.json:
- *
- *   "fast": {
- *     "provider": "claude-bridge",
- *     "modelId": "claude-haiku-4-5"
- *   }
- *
- * We reuse pi's exported `generateBranchSummary`, so the prompt, structured
- * format, file tracking, and preamble are identical to the built-in summarizer
- * — only the model changes and a couple of extra guideline lines are appended
- * via `customInstructions` (see EXTRA_TREE_GUIDELINES).
+ * On any failure (model missing, no key, error) it returns nothing and pi's
+ * default summarizer runs.
  */
 
 import fs from "node:fs/promises";
