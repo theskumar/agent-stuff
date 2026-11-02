@@ -42,9 +42,56 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { promises as fs, existsSync } from "node:fs";
+import { promises as fs, existsSync, readFileSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+
+// Pi Web registers this global. Its sessions run inside its server, so there is
+// no terminal to split and process.argv is the server's, not pi's. There the
+// fork stays a session file (Pi Web lists it in the sidebar) and a prompt is
+// sent through Pi Web's own HTTP API.
+const isPiWeb = () => Symbol.for("@agegr/pi-web/session-liveness/v1") in globalThis;
+
+/** URL of the Pi Web server running this process, from the run record its CLI writes. */
+function piWebBaseUrl(): string | null {
+  const dir = path.join(getAgentDir(), "pi-web-run");
+  try {
+    for (const name of readdirSync(dir)) {
+      const record = JSON.parse(readFileSync(path.join(dir, name), "utf8")) as {
+        pid?: number;
+        nextPid?: number;
+        url?: string;
+      };
+      if ((record.nextPid === process.pid || record.pid === process.pid) && record.url) {
+        return record.url;
+      }
+    }
+  } catch {
+    // No run records: not started through the pi-web CLI.
+  }
+  return null;
+}
+
+/** Send `message` as a prompt to the Pi Web session `sessionId`, starting it if needed. */
+async function promptPiWebSession(sessionId: string, message: string): Promise<void> {
+  const baseUrl = piWebBaseUrl();
+  if (!baseUrl) throw new Error("Pi Web server address not found");
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const password = process.env.PI_WEB_PASSWORD;
+  if (password) {
+    headers.authorization = `Basic ${Buffer.from(`pi:${password}`).toString("base64")}`;
+  }
+  const res = await fetch(`${baseUrl}/api/agent/${encodeURIComponent(sessionId)}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ type: "prompt", message }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
+}
 
 function shellQuote(value: string): string {
   if (value.length === 0) return "''";
@@ -257,7 +304,9 @@ function detectForkBackend(): ForkBackend {
   return tmuxForkBackend;
 }
 
-async function createForkedSession(ctx: ExtensionCommandContext): Promise<string | undefined> {
+async function createForkedSession(
+  ctx: ExtensionCommandContext,
+): Promise<{ file: string; id: string } | undefined> {
   const sessionFile = ctx.sessionManager.getSessionFile();
   if (!sessionFile) {
     return undefined;
@@ -286,7 +335,29 @@ async function createForkedSession(ctx: ExtensionCommandContext): Promise<string
   await fs.mkdir(sessionDir, { recursive: true });
   await fs.writeFile(newSessionFile, lines, "utf8");
 
-  return newSessionFile;
+  return { file: newSessionFile, id: newSessionId };
+}
+
+async function forkInPiWeb(ctx: ExtensionCommandContext, prompt: string): Promise<void> {
+  const forked = await createForkedSession(ctx);
+  if (!forked) {
+    ctx.ui.notify("No persisted session to fork yet.", "warning");
+    return;
+  }
+  const fileName = path.basename(forked.file);
+  if (!prompt) {
+    ctx.ui.notify(`Forked to ${fileName}. Open it from the sidebar.`, "info");
+    return;
+  }
+  try {
+    await promptPiWebSession(forked.id, prompt);
+    ctx.ui.notify(`Forked to ${fileName} and sent prompt. Open it from the sidebar.`, "info");
+  } catch (err) {
+    ctx.ui.notify(
+      `Forked to ${fileName}, but sending the prompt failed: ${err instanceof Error ? err.message : String(err)}`,
+      "error",
+    );
+  }
 }
 
 export default function (pi: ExtensionAPI): void {
@@ -294,6 +365,11 @@ export default function (pi: ExtensionAPI): void {
     description:
       "Fork this session into a new pi process in a new tmux window or herdr tab. Usage: /split-fork [-d] [optional prompt]",
     handler: async (args, ctx) => {
+      if (isPiWeb()) {
+        await forkInPiWeb(ctx, parseArgs(args).prompt);
+        return;
+      }
+
       const backend = detectForkBackend();
       const unavailable = backend.precheck();
       if (unavailable) {
@@ -307,7 +383,7 @@ export default function (pi: ExtensionAPI): void {
       // so never switch away from a turn that is still running: the fork opens
       // behind it and the notify says where it went.
       const background = backgroundRequested || wasBusy;
-      const forkedSessionFile = await createForkedSession(ctx);
+      const forkedSessionFile = (await createForkedSession(ctx))?.file;
       const piCommand = buildPiCommand(forkedSessionFile, prompt);
 
       const result = await backend.open(pi, { cwd: ctx.cwd, piCommand, background });

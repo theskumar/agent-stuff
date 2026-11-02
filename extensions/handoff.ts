@@ -50,6 +50,8 @@
  *   - Tail-shaped bloat where a clean cut point exists → split-fork + rewind.
  */
 
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import type {
   Api,
   ImageContent,
@@ -65,7 +67,7 @@ import type {
   ExtensionCommandContext,
   SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import { BorderedLoader, convertToLlm } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader, convertToLlm, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 const SYSTEM_PROMPT_BASE = `You produce a continuation prompt so a fresh agent resumes the SAME in-progress task with no memory of the prior session. Optimize for resuming work, not for a readable report. Output the prompt only, no preamble like "Here's the prompt".`;
 
@@ -304,6 +306,57 @@ function buildConversationText(
   return { text, approxTokens: Math.round(text.length / CHARS_PER_TOKEN) };
 }
 
+// --- Pi Web ---------------------------------------------------------------
+// Pi Web registers this global. Its extension host cannot replace the session
+// (newSession() reports cancelled), so there the handoff starts the new
+// session through Pi Web's own HTTP API instead.
+
+const isPiWeb = () => Symbol.for("@agegr/pi-web/session-liveness/v1") in globalThis;
+
+/** URL of the Pi Web server running this process, from the run record its CLI writes. */
+function piWebBaseUrl(): string | null {
+  const dir = path.join(getAgentDir(), "pi-web-run");
+  try {
+    for (const name of readdirSync(dir)) {
+      const record = JSON.parse(readFileSync(path.join(dir, name), "utf8")) as {
+        pid?: number;
+        nextPid?: number;
+        url?: string;
+      };
+      if ((record.nextPid === process.pid || record.pid === process.pid) && record.url) {
+        return record.url;
+      }
+    }
+  } catch {
+    // No run records: not started through the pi-web CLI.
+  }
+  return null;
+}
+
+/** Start a Pi Web session in `cwd` that runs `message` as its first prompt. */
+async function startPiWebSession(ctx: ExtensionCommandContext, message: string): Promise<void> {
+  const baseUrl = piWebBaseUrl();
+  if (!baseUrl) throw new Error("Pi Web server address not found");
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const password = process.env.PI_WEB_PASSWORD;
+  if (password) {
+    headers.authorization = `Basic ${Buffer.from(`pi:${password}`).toString("base64")}`;
+  }
+  const res = await fetch(`${baseUrl}/api/agent/new`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      cwd: ctx.cwd,
+      type: "prompt",
+      message,
+      ...(ctx.model ? { provider: ctx.model.provider, modelId: ctx.model.id } : {}),
+      thinkingLevel: ctx.thinkingLevel,
+    }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { sessionId?: string; error?: string };
+  if (!res.ok || !body.sessionId) throw new Error(body.error ?? `HTTP ${res.status}`);
+}
+
 // --- Command -------------------------------------------------------------
 
 export default function (pi: ExtensionAPI) {
@@ -401,13 +454,30 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      const piWeb = isPiWeb();
       const editedPrompt = await ctx.ui.editor(
-        "Edit handoff prompt (enter to submit, shift+enter for newline, esc to cancel)",
+        piWeb
+          ? "Edit handoff prompt. Submitting starts a new session with it."
+          : "Edit handoff prompt (enter to submit, shift+enter for newline, esc to cancel)",
         result,
       );
 
       if (editedPrompt === undefined) {
         ctx.ui.notify("Cancelled", "info");
+        return;
+      }
+
+      if (piWeb) {
+        try {
+          await startPiWebSession(ctx, editedPrompt);
+          ctx.ui.notify("Handoff started in a new session. Open it from the sidebar.", "info");
+        } catch (err) {
+          ctx.ui.setEditorText(editedPrompt);
+          ctx.ui.notify(
+            `Could not start a new session (${err instanceof Error ? err.message : String(err)}). The handoff prompt is in the editor; start a new session and paste it.`,
+            "error",
+          );
+        }
         return;
       }
 

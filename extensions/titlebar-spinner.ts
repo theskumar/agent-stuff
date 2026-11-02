@@ -29,8 +29,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const BRAILLE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-function getBaseTitle(pi: ExtensionAPI): string {
-  const cwd = path.basename(process.cwd());
+function getBaseTitle(pi: ExtensionAPI, ctx: ExtensionContext): string {
+  const cwd = path.basename(ctx.cwd);
   const session = pi.getSessionName();
   return session ? `π - ${session} - ${cwd}` : `π - ${cwd}`;
 }
@@ -45,14 +45,14 @@ export default function (pi: ExtensionAPI) {
       timer = null;
     }
     frameIndex = 0;
-    ctx.ui.setTitle(getBaseTitle(pi));
+    ctx.ui.setTitle(getBaseTitle(pi, ctx));
   }
 
   function startAnimation(ctx: ExtensionContext) {
     stopAnimation(ctx);
     timer = setInterval(() => {
       const frame = BRAILLE_FRAMES[frameIndex % BRAILLE_FRAMES.length];
-      const cwd = path.basename(process.cwd());
+      const cwd = path.basename(ctx.cwd);
       const session = pi.getSessionName();
       const title = session ? `${frame} π - ${session} - ${cwd}` : `${frame} π - ${cwd}`;
       ctx.ui.setTitle(title);
@@ -60,15 +60,17 @@ export default function (pi: ExtensionAPI) {
     }, 80);
   }
 
+  // Only a terminal has a window title to animate. Pi Web keeps the browser
+  // tab title to itself, so there every frame would be a wasted event.
   pi.on("agent_start", async (_event, ctx) => {
-    startAnimation(ctx);
+    if (ctx.mode === "tui") startAnimation(ctx);
   });
 
   pi.on("agent_end", async (_event, ctx) => {
-    stopAnimation(ctx);
+    if (ctx.mode === "tui") stopAnimation(ctx);
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    stopAnimation(ctx);
+    if (ctx.mode === "tui") stopAnimation(ctx);
   });
 }

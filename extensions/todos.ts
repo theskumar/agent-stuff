@@ -92,6 +92,7 @@ import {
   truncateToWidth,
   visibleWidth,
 } from "@earendil-works/pi-tui";
+import type { KeybindingsManager } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 const TODO_DIR_NAME = ".pi/todos";
@@ -130,9 +131,7 @@ interface TodoSettings {
   gcDays: number;
 }
 
-type KeybindingMatcher = {
-  matches: (keyData: string, keybindingId: string) => boolean;
-};
+type KeybindingMatcher = Pick<KeybindingsManager, "matches">;
 
 const TodoParams = Type.Object({
   action: StringEnum([
@@ -763,14 +762,6 @@ function getTodosDir(cwd: string): string {
     return path.resolve(cwd, overridePath.trim());
   }
   return path.resolve(cwd, TODO_DIR_NAME);
-}
-
-function getTodosDirLabel(cwd: string): string {
-  const overridePath = process.env[TODO_PATH_ENV];
-  if (overridePath?.trim()) {
-    return path.resolve(cwd, overridePath.trim());
-  }
-  return TODO_DIR_NAME;
 }
 
 function getTodoSettingsPath(todosDir: string): string {
@@ -1438,7 +1429,9 @@ export default function todosExtension(pi: ExtensionAPI) {
     await garbageCollectTodos(todosDir, settings);
   });
 
-  const todosDirLabel = getTodosDirLabel(process.cwd());
+  // Tools register before any session exists, and Pi Web's process cwd is its own
+  // install directory, so name the directory relative to the session cwd.
+  const todosDirLabel = process.env[TODO_PATH_ENV]?.trim() || TODO_DIR_NAME;
 
   pi.registerTool({
     name: "todo",
@@ -1871,6 +1864,15 @@ export default function todosExtension(pi: ExtensionAPI) {
         };
 
         const openTodoOverlay = async (record: TodoRecord): Promise<TodoOverlayAction> => {
+          // Pi Web shows only the oldest open custom panel, so a nested overlay would
+          // wait behind this one. Outside the TUI, show the detail view in this panel.
+          if (ctx.mode !== "tui") {
+            return new Promise<TodoOverlayAction>((resolve) => {
+              setActiveComponent(
+                new TodoDetailOverlayComponent(tui, theme, keybindings, record, resolve),
+              );
+            });
+          }
           const action = await ctx.ui.custom<TodoOverlayAction>(
             (overlayTui, overlayTheme, overlayKeybindings, overlayDone) =>
               new TodoDetailOverlayComponent(

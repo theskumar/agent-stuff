@@ -218,8 +218,10 @@ const sendMoshiPush = async (title: string, message: string): Promise<void> => {
 };
 
 export default function (pi: ExtensionAPI) {
-  pi.on("agent_end", async (event) => {
-    if (!(await shouldPush())) {
+  pi.on("agent_end", async (event, ctx) => {
+    // A push opens Moshi's terminal, so only terminal sessions qualify. Pi Web
+    // has its own push notifications; print and RPC runs (subagents) have no UI.
+    if (ctx.mode !== "tui" || !(await shouldPush())) {
       return;
     }
 

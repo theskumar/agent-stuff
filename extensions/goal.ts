@@ -304,10 +304,21 @@ export default function goalExtension(pi: ExtensionAPI) {
     } satisfies PersistedGoalState);
   }
 
+  // Pi Web turns a status keyed "command:/…" into a button that sends that command;
+  // the TUI footer shows only the text.
+  const RESUME_STATUS_KEY = "command:/goal resume";
+
+  function setGoalStatusLine(ctx: ExtensionContext, text: string | undefined, key = "goal"): void {
+    for (const other of ["goal", RESUME_STATUS_KEY]) {
+      if (other !== key) ctx.ui.setStatus(other, undefined);
+    }
+    ctx.ui.setStatus(key, text);
+  }
+
   function updateStatus(ctx: ExtensionContext): void {
     if (!ctx.hasUI) return;
     if (!goal) {
-      ctx.ui.setStatus("goal", undefined);
+      setGoalStatusLine(ctx, undefined);
       return;
     }
     const theme = ctx.ui.theme;
@@ -318,17 +329,21 @@ export default function goalExtension(pi: ExtensionAPI) {
           snapshot.tokenBudget === undefined
             ? ""
             : ` (${formatTokensCompact(snapshot.tokensUsed)} / ${formatTokensCompact(snapshot.tokenBudget)})`;
-        ctx.ui.setStatus("goal", theme.fg("accent", `Pursuing goal${usage}`));
+        setGoalStatusLine(ctx, theme.fg("accent", `Pursuing goal${usage}`));
         break;
       }
       case "paused":
-        ctx.ui.setStatus("goal", theme.fg("warning", "Goal paused (/goal resume)"));
+        setGoalStatusLine(
+          ctx,
+          theme.fg("warning", "Goal paused (/goal resume)"),
+          RESUME_STATUS_KEY,
+        );
         break;
       case "budgetLimited":
-        ctx.ui.setStatus("goal", theme.fg("warning", "Goal budget reached"));
+        setGoalStatusLine(ctx, theme.fg("warning", "Goal budget reached"));
         break;
       case "complete":
-        ctx.ui.setStatus("goal", theme.fg("success", "Goal complete"));
+        setGoalStatusLine(ctx, theme.fg("success", "Goal complete"));
         break;
     }
   }

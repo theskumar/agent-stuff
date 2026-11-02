@@ -76,6 +76,9 @@ const BTW_SUMMARY_PROMPT =
 
 type SessionThinkingLevel = "off" | AiThinkingLevel;
 
+// Pi Web registers this global; it draws custom UI as an inline panel that grows with its content.
+const isPiWeb = () => Symbol.for("@agegr/pi-web/session-liveness/v1") in globalThis;
+
 type BtwDetails = {
   question: string;
   answer: string;
@@ -319,7 +322,8 @@ class BtwOverlay extends Container implements Focusable {
   override render(width: number): string[] {
     const dialogWidth = Math.max(56, Math.min(width, Math.floor(width * 0.9)));
     const innerWidth = Math.max(40, dialogWidth - 2);
-    const terminalRows = process.stdout.rows ?? 30;
+    // Hosts without a terminal (Pi Web) report their panel size through tui.terminal.
+    const terminalRows = this.tui.terminal?.rows ?? process.stdout.rows ?? 30;
     const dialogHeight = Math.max(16, Math.min(30, Math.floor(terminalRows * 0.75)));
     const chromeHeight = 7;
     const transcriptHeight = Math.max(6, dialogHeight - chromeHeight);
@@ -327,7 +331,9 @@ class BtwOverlay extends Container implements Focusable {
     // Markdown renders to innerWidth already — no manual wrapping needed
     const transcript = this.getTranscript(innerWidth, this.theme);
     const visibleTranscript = transcript.slice(-transcriptHeight);
-    const transcriptPadding = Math.max(0, transcriptHeight - visibleTranscript.length);
+    const transcriptPadding = isPiWeb()
+      ? 0
+      : Math.max(0, transcriptHeight - visibleTranscript.length);
 
     const status = this.getStatus();
 
@@ -769,7 +775,8 @@ export default function (pi: ExtensionAPI) {
           overlay.setDraft(overlayDraft);
           runtime.setDraft = (value) => overlay.setDraft(value);
           runtime.refresh = () => {
-            overlay.focused = runtime.handle?.isFocused() ?? false;
+            // Pi Web shows custom UI as an inline panel and never supplies an overlay handle.
+            overlay.focused = runtime.handle ? runtime.handle.isFocused() : true;
             tui.requestRender();
           };
           runtime.close = () => {

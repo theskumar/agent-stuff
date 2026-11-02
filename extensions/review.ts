@@ -71,15 +71,6 @@ import {
   fuzzyFilter,
 } from "@earendil-works/pi-tui";
 
-// State to track fresh session review (where we branched from).
-// Module-level state means only one review can be active at a time.
-// This is intentional - the UI and /end-review command assume a single active review.
-let reviewOriginId: string | undefined = undefined;
-let endReviewInProgress = false;
-let reviewLoopFixingEnabled = false;
-let reviewCustomInstructions: string | undefined = undefined;
-let reviewLoopInProgress = false;
-
 const REVIEW_STATE_TYPE = "review-session";
 const REVIEW_ANCHOR_TYPE = "review-anchor";
 const REVIEW_SETTINGS_TYPE = "review-settings";
@@ -106,31 +97,6 @@ type ReviewSettingsState = {
   customInstructions?: string;
 };
 
-function setReviewWidget(ctx: ExtensionContext, active: boolean) {
-  if (!ctx.hasUI) return;
-  if (!active) {
-    ctx.ui.setWidget("review", undefined);
-    return;
-  }
-
-  ctx.ui.setWidget("review", (_tui, theme) => {
-    const message = reviewLoopInProgress
-      ? "Review session active (loop fixing running)"
-      : reviewLoopFixingEnabled
-        ? "Review session active (loop fixing enabled), return with /end-review"
-        : "Review session active, return with /end-review";
-    const text = new Text(theme.fg("warning", message), 0, 0);
-    return {
-      render(width: number) {
-        return text.render(width);
-      },
-      invalidate() {
-        text.invalidate();
-      },
-    };
-  });
-}
-
 function getReviewState(ctx: ExtensionContext): ReviewSessionState | undefined {
   let state: ReviewSessionState | undefined;
   for (const entry of ctx.sessionManager.getBranch()) {
@@ -140,19 +106,6 @@ function getReviewState(ctx: ExtensionContext): ReviewSessionState | undefined {
   }
 
   return state;
-}
-
-function applyReviewState(ctx: ExtensionContext) {
-  const state = getReviewState(ctx);
-
-  if (state?.active && state.originId) {
-    reviewOriginId = state.originId;
-    setReviewWidget(ctx, true);
-    return;
-  }
-
-  reviewOriginId = undefined;
-  setReviewWidget(ctx, false);
 }
 
 function getReviewSettings(ctx: ExtensionContext): ReviewSettingsState {
@@ -167,12 +120,6 @@ function getReviewSettings(ctx: ExtensionContext): ReviewSettingsState {
     loopFixingEnabled: state?.loopFixingEnabled === true,
     customInstructions: state?.customInstructions?.trim() || undefined,
   };
-}
-
-function applyReviewSettings(ctx: ExtensionContext) {
-  const state = getReviewSettings(ctx);
-  reviewLoopFixingEnabled = state.loopFixingEnabled === true;
-  reviewCustomInstructions = state.customInstructions?.trim() || undefined;
 }
 
 function parseMarkdownHeading(line: string): { level: number; title: string } | null {
@@ -1482,6 +1429,59 @@ type ReviewPresetValue =
   | typeof TOGGLE_CUSTOM_INSTRUCTIONS_VALUE;
 
 export default function reviewExtension(pi: ExtensionAPI) {
+  // Per-session review state. Pi Web runs many sessions in one process, and
+  // sessions in one cwd share this module, so module-level state would leak
+  // between them. session_start and session_tree rebuild it from the branch.
+  let reviewOriginId: string | undefined = undefined;
+  let endReviewInProgress = false;
+  let reviewLoopFixingEnabled = false;
+  let reviewCustomInstructions: string | undefined = undefined;
+  let reviewLoopInProgress = false;
+
+  function setReviewWidget(ctx: ExtensionContext, active: boolean) {
+    if (!ctx.hasUI) return;
+    if (!active) {
+      ctx.ui.setWidget("review", undefined);
+      return;
+    }
+
+    ctx.ui.setWidget("review", (_tui, theme) => {
+      const message = reviewLoopInProgress
+        ? "Review session active (loop fixing running)"
+        : reviewLoopFixingEnabled
+          ? "Review session active (loop fixing enabled), return with /end-review"
+          : "Review session active, return with /end-review";
+      const text = new Text(theme.fg("warning", message), 0, 0);
+      return {
+        render(width: number) {
+          return text.render(width);
+        },
+        invalidate() {
+          text.invalidate();
+        },
+      };
+    });
+  }
+
+  function applyReviewState(ctx: ExtensionContext) {
+    const state = getReviewState(ctx);
+
+    if (state?.active && state.originId) {
+      reviewOriginId = state.originId;
+      setReviewWidget(ctx, true);
+      return;
+    }
+
+    reviewOriginId = undefined;
+    setReviewWidget(ctx, false);
+  }
+
+  function applyReviewSettings(ctx: ExtensionContext) {
+    const state = getReviewSettings(ctx);
+    reviewLoopFixingEnabled = state.loopFixingEnabled === true;
+    reviewCustomInstructions = state.customInstructions?.trim() || undefined;
+  }
+
   function persistReviewSettings() {
     pi.appendEntry(REVIEW_SETTINGS_TYPE, {
       loopFixingEnabled: reviewLoopFixingEnabled,

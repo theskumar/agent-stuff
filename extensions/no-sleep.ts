@@ -42,8 +42,11 @@ type Level = "info" | "warning" | "error";
 let caffeinate: ChildProcess | undefined;
 let enabled = readBooleanEnv("PI_NO_SLEEP", true);
 let scope: Scope = readScopeEnv();
-let agentActive = false;
 let lastError: string | undefined;
+// Pi Web runs many sessions in one process, and sessions in one cwd share this
+// module. Each session holds the assertion while it needs it; caffeinate runs
+// while any session does.
+const holders = new Set<symbol>();
 
 function readBooleanEnv(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
@@ -133,12 +136,7 @@ function stop(_ctx?: ExtensionContext): void {
 }
 
 function reconcile(ctx?: ExtensionContext): void {
-  if (!enabled) {
-    stop(ctx);
-    return;
-  }
-
-  if (scope === "session" || agentActive) {
+  if (enabled && holders.size > 0) {
     start(ctx);
   } else {
     stop(ctx);
@@ -150,7 +148,9 @@ function describeState(): string {
     return "No Sleep is inactive: caffeinate is only available on macOS.";
   }
 
-  const state = caffeinate ? `active (pid ${caffeinate.pid ?? "unknown"})` : "idle";
+  const state = caffeinate
+    ? `active (pid ${caffeinate.pid ?? "unknown"}, ${holders.size} session(s))`
+    : "idle";
   const display = readBooleanEnv("PI_NO_SLEEP_DISPLAY", false) ? "yes" : "no";
   return [
     `No Sleep is ${enabled ? "enabled" : "disabled"}.`,
@@ -164,6 +164,18 @@ function describeState(): string {
 }
 
 export default function noSleepExtension(pi: ExtensionAPI) {
+  const holder = Symbol("no-sleep");
+  let agentActive = false;
+
+  const update = (ctx?: ExtensionContext) => {
+    if (scope === "session" || agentActive) {
+      holders.add(holder);
+    } else {
+      holders.delete(holder);
+    }
+    reconcile(ctx);
+  };
+
   const cleanupOnProcessExit = () => {
     stop(undefined);
   };
@@ -171,22 +183,23 @@ export default function noSleepExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     agentActive = false;
-    reconcile(ctx);
+    update(ctx);
   });
 
   pi.on("agent_start", (_event, ctx) => {
     agentActive = true;
-    reconcile(ctx);
+    update(ctx);
   });
 
   pi.on("agent_end", (_event, ctx) => {
     agentActive = false;
-    reconcile(ctx);
+    update(ctx);
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
     agentActive = false;
-    stop(ctx);
+    holders.delete(holder);
+    reconcile(ctx);
     process.off("exit", cleanupOnProcessExit);
   });
 
@@ -197,19 +210,19 @@ export default function noSleepExtension(pi: ExtensionAPI) {
 
       if (command === "on" || command === "enable") {
         enabled = true;
-        reconcile(ctx);
+        update(ctx);
       } else if (command === "off" || command === "disable") {
         enabled = false;
-        reconcile(ctx);
+        update(ctx);
       } else if (command === "toggle") {
         enabled = !enabled;
-        reconcile(ctx);
+        update(ctx);
       } else if (command === "agent") {
         scope = "agent";
-        reconcile(ctx);
+        update(ctx);
       } else if (command === "session") {
         scope = "session";
-        reconcile(ctx);
+        update(ctx);
       } else if (command && command !== "status") {
         notify(ctx, "Usage: /no-sleep [status|on|off|toggle|agent|session]", "warning");
         return;

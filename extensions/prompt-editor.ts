@@ -540,6 +540,20 @@ const runtime: ModeRuntime = {
 // Updated by setEditor() when the custom editor is instantiated.
 let requestEditorRender: (() => void) | undefined;
 
+// Pi Web and other RPC clients draw their own composer, so setEditorComponent()
+// is a no-op there. Show the mode as a status instead; Pi Web turns a status
+// keyed "command:/…" into a button that sends the command.
+const MODE_STATUS_KEY = "command:/mode";
+
+function refreshModeDisplay(ctx: ExtensionContext): void {
+  if (!ctx.hasUI) return;
+  if (ctx.mode === "tui") {
+    requestEditorRender?.();
+    return;
+  }
+  ctx.ui.setStatus(MODE_STATUS_KEY, `mode: ${formatModeLabel(runtime.currentMode)}`);
+}
+
 async function ensureRuntime(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
   const filePath = await resolveModesPath(ctx.cwd);
 
@@ -655,7 +669,7 @@ async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string):
   if (mode === CUSTOM_MODE_NAME) {
     runtime.currentMode = CUSTOM_MODE_NAME;
     customOverlay = getCurrentSelectionSpec(pi, ctx);
-    if (ctx.hasUI) requestEditorRender?.();
+    refreshModeDisplay(ctx);
     return;
   }
 
@@ -715,9 +729,7 @@ async function applyMode(pi: ExtensionAPI, ctx: ExtensionContext, mode: string):
     await persistRuntime(pi, ctx, true);
   }
 
-  if (ctx.hasUI) {
-    requestEditorRender?.();
-  }
+  refreshModeDisplay(ctx);
 }
 
 const MODE_UI_CONFIGURE = "Configure modes…";
@@ -1751,7 +1763,8 @@ function setEditor(pi: ExtensionAPI, ctx: ExtensionContext, history: PromptEntry
 }
 
 function applyEditor(pi: ExtensionAPI, ctx: ExtensionContext) {
-  if (!ctx.hasUI) return;
+  // Only the terminal UI takes a custom editor; skip loading prompt history for others.
+  if (ctx.mode !== "tui") return;
 
   const sessionFile = ctx.sessionManager.getSessionFile();
   const currentEntries = ctx.sessionManager.getBranch();
@@ -1848,13 +1861,16 @@ export default function (pi: ExtensionAPI) {
       batteryConfig = await loadBatteryConfig(ctx.cwd);
       batteryConfigByCwd.set(ctx.cwd, batteryConfig);
     }
-    startBatteryPolling();
+    // The indicator lives in the TUI editor border.
+    if (ctx.mode === "tui") startBatteryPolling();
 
     const branch = ctx.sessionManager.getBranch();
     const isFreshSession = branch.every(
       (entry) => entry.type === "model_change" || entry.type === "thinking_level_change",
     );
-    if (isFreshSession && !modelGivenOnCommandLine()) {
+    // RPC clients (Pi Web) pick the model of a new session themselves, subagents
+    // included, so the remembered mode would override their choice.
+    if (isFreshSession && ctx.mode !== "rpc" && !modelGivenOnCommandLine()) {
       // Pi records the default model/thinking level before session_start, even for a
       // fresh session. Ignore those initialization entries and apply the last mode.
       // An explicit `pi --model X` wins over the remembered mode.
@@ -1869,6 +1885,7 @@ export default function (pi: ExtensionAPI) {
         runtime.currentMode = CUSTOM_MODE_NAME;
         customOverlay = getCurrentSelectionSpec(pi, ctx);
       }
+      refreshModeDisplay(ctx);
     }
 
     applyEditor(pi, ctx);
@@ -1910,8 +1927,6 @@ export default function (pi: ExtensionAPI) {
     };
 
     // Do not persist/select custom.
-    if (ctx.hasUI) {
-      requestEditorRender?.();
-    }
+    refreshModeDisplay(ctx);
   });
 }

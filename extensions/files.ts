@@ -95,6 +95,8 @@ const FILE_URL_REGEX = /file:\/\/[^\s"'<>]+/g;
 const PATH_REGEX = /(?:^|[\s"'`([{<])((?:~|\/)[^\s"'`<>)}\]]+)/g;
 
 const MAX_EDIT_BYTES = 40 * 1024 * 1024;
+// Pi Web sends the whole file to the browser's editor dialog, so keep it smaller there.
+const MAX_DIALOG_EDIT_BYTES = 1024 * 1024;
 
 const extractFileReferencesFromText = (text: string): string[] => {
   const refs: string[] = [];
@@ -788,11 +790,35 @@ const openExternalEditor = (tui: TUI, editorCmd: string, content: string): strin
   }
 };
 
+const saveEdit = (ctx: ExtensionContext, target: FileEntry, updated: string): void => {
+  try {
+    writeFileSync(target.resolvedPath, updated, "utf8");
+  } catch {
+    ctx.ui.notify(`Failed to save ${target.displayPath}`, "error");
+  }
+};
+
 const editPath = async (
   ctx: ExtensionContext,
   target: FileEntry,
   content: string,
 ): Promise<void> => {
+  // Pi Web and RPC clients have no terminal to hand to $EDITOR; use their editor dialog.
+  if (ctx.mode !== "tui") {
+    if (Buffer.byteLength(content, "utf8") > MAX_DIALOG_EDIT_BYTES) {
+      ctx.ui.notify("File is too large for the editor dialog", "warning");
+      return;
+    }
+    const edited = await ctx.ui.editor(`Edit ${target.displayPath}`, content);
+    if (edited === undefined) {
+      ctx.ui.notify("Edit cancelled", "info");
+      return;
+    }
+    const keepFinalNewline = content.endsWith("\n") && !edited.endsWith("\n");
+    saveEdit(ctx, target, keepFinalNewline ? `${edited}\n` : edited);
+    return;
+  }
+
   const editorCmd = process.env.VISUAL || process.env.EDITOR;
   if (!editorCmd) {
     ctx.ui.notify("No editor configured. Set $VISUAL or $EDITOR.", "warning");
@@ -815,11 +841,7 @@ const editPath = async (
     return;
   }
 
-  try {
-    writeFileSync(target.resolvedPath, updated, "utf8");
-  } catch {
-    ctx.ui.notify(`Failed to save ${target.displayPath}`, "error");
-  }
+  saveEdit(ctx, target, updated);
 };
 
 const revealPath = async (
@@ -1016,12 +1038,18 @@ const deletePath = async (
   return true;
 };
 
-const addFileToPrompt = (ctx: ExtensionContext, target: FileEntry): void => {
+const addFileToPrompt = (
+  ctx: ExtensionContext,
+  target: FileEntry,
+  draft: { text: string },
+): void => {
   const mentionTarget = target.displayPath || target.resolvedPath;
   const mention = `@${mentionTarget}`;
-  const current = ctx.ui.getEditorText();
+  // Pi Web and RPC clients cannot read their editor back, so keep what this browse added.
+  const current = ctx.ui.getEditorText() || draft.text;
   const separator = current && !current.endsWith(" ") ? " " : "";
-  ctx.ui.setEditorText(`${current}${separator}${mention}`);
+  draft.text = `${current}${separator}${mention}`;
+  ctx.ui.setEditorText(draft.text);
   ctx.ui.notify(`Added ${mention} to prompt`, "info");
 };
 
@@ -1054,7 +1082,13 @@ const showFileSelector = async (
     container.addChild(listContainer);
     container.addChild(
       new Text(
-        theme.fg("dim", "Type to filter • enter to select • ctrl+shift+d diff • esc to cancel"),
+        theme.fg(
+          "dim",
+          // Browser key forwarding sends ctrl+shift+d as ctrl+d, so only the TUI gets the shortcut.
+          ctx.mode === "tui"
+            ? "Type to filter • enter to select • ctrl+shift+d diff • esc to cancel"
+            : "Type to filter • enter to select • esc to cancel",
+        ),
         0,
         0,
       ),
@@ -1171,6 +1205,7 @@ const runFileBrowser = async (pi: ExtensionAPI, ctx: ExtensionContext): Promise<
   }
 
   let lastSelectedPath: string | null = null;
+  const promptDraft = { text: "" };
   while (true) {
     const { selected, quickAction } = await showFileSelector(ctx, files, lastSelectedPath, gitRoot);
     if (!selected) {
@@ -1215,7 +1250,7 @@ const runFileBrowser = async (pi: ExtensionAPI, ctx: ExtensionContext): Promise<
         await editPath(ctx, selected, editCheck.content);
         break;
       case "addToPrompt":
-        addFileToPrompt(ctx, selected);
+        addFileToPrompt(ctx, selected, promptDraft);
         break;
       case "diff":
         await openDiff(pi, ctx, selected, gitRoot);

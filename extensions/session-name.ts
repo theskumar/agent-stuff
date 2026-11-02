@@ -211,6 +211,9 @@ async function syncWindowName(
   name: string | undefined,
   opts: { notifyOnError: boolean },
 ): Promise<void> {
+  // Only a terminal session owns the pane it runs in. Pi Web sessions run in its
+  // server, which would rename whichever pane or tab launched pi-web.
+  if (ctx.mode !== "tui") return;
   const backend = detectBackend();
   if (!backend) return;
 
@@ -360,10 +363,10 @@ export default function (pi: ExtensionAPI): void {
     await syncWindowName(pi, ctx, name, { notifyOnError: false });
   });
 
-  pi.on("session_shutdown", async (event, _ctx) => {
+  pi.on("session_shutdown", async (event, ctx) => {
     // new/resume/fork/reload replace the session in-process; a session_start
     // resync follows, so restoring here would only flicker the status bar.
-    if (event.reason !== "quit") return;
+    if (event.reason !== "quit" || ctx.mode !== "tui") return;
     await restoreWindowName(pi);
   });
 }

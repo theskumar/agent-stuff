@@ -32,7 +32,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { type Api, type Model, type UserMessage, complete } from "@earendil-works/pi-ai";
+import type { Api, Model, UserMessage } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -104,7 +104,7 @@ interface AnswerConfig {
 
 const CONFIG_PATH = join(homedir(), ".pi", "agent", "extensions", "answer.config.json");
 const DEFAULT_CONFIG: AnswerConfig = {
-  provider: "openai-codex",
+  provider: "openai",
   model: "gpt-6-luna",
   reasoningEffort: "low",
 };
@@ -542,10 +542,6 @@ export default function (pi: ExtensionAPI) {
       loader.onAbort = () => done({ kind: "aborted" });
 
       const doExtract = async (): Promise<ExtractionOutcome> => {
-        const auth = await ctx.modelRegistry.getApiKeyAndHeaders(extractionModel);
-        if (auth.ok === false) {
-          return { kind: "error", message: auth.error };
-        }
         // Inline the extraction instructions into the user message. Some
         // providers (notably claude-bridge, which uses the Claude Code preset)
         // ignore the systemPrompt parameter, so we cannot rely on it alone.
@@ -556,14 +552,14 @@ export default function (pi: ExtensionAPI) {
           timestamp: Date.now(),
         };
 
+        // The registry resolves request-time auth (OAuth included); pi-ai's
+        // compat complete() only reads API keys from the environment.
         // reasoningEffort only reaches reasoning-capable OpenAI/codex adapters;
         // other providers ignore the extra key.
-        const response = await complete(
+        const response = await ctx.modelRegistry.complete(
           extractionModel,
           { systemPrompt: SYSTEM_PROMPT, messages: [userMessage] },
           {
-            apiKey: auth.apiKey,
-            headers: auth.headers,
             signal: loader.signal,
             ...(resolved.configured.reasoningEffort
               ? { reasoningEffort: resolved.configured.reasoningEffort }
@@ -573,6 +569,9 @@ export default function (pi: ExtensionAPI) {
 
         if (response.stopReason === "aborted") {
           return { kind: "aborted" };
+        }
+        if (response.stopReason === "error") {
+          return { kind: "error", message: response.errorMessage ?? "unknown error" };
         }
 
         const responseText = response.content
@@ -600,6 +599,11 @@ export default function (pi: ExtensionAPI) {
       return loader;
     });
 
+    // Hosts without custom panels (plain RPC clients) resolve custom() to undefined.
+    if (!outcome) {
+      ctx.ui.notify("answer needs the terminal UI or Pi Web", "error");
+      return;
+    }
     if (outcome.kind === "aborted") {
       ctx.ui.notify("Cancelled", "info");
       return;
@@ -630,7 +634,7 @@ export default function (pi: ExtensionAPI) {
       return new QnAComponent(extractionResult.questions, tui, done);
     });
 
-    if (answersResult === null) {
+    if (answersResult == null) {
       ctx.ui.notify("Cancelled", "info");
       return;
     }

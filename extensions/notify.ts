@@ -254,7 +254,12 @@ const formatNotification = (text: string | null): { title: string; body: string 
 };
 
 export default function (pi: ExtensionAPI) {
-  pi.on("agent_end", async (event) => {
+  pi.on("agent_end", async (event, ctx) => {
+    // Pi Web sends its own browser notifications; print and RPC runs have no terminal.
+    if (ctx.mode !== "tui") {
+      return;
+    }
+
     const lastText = extractLastAssistantText(event.messages ?? []);
     const { title, body } = formatNotification(lastText);
     const target = await tmuxTarget();

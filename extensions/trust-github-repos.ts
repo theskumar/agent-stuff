@@ -31,6 +31,11 @@
  */
 
 import type { ExtensionAPI, ProjectTrustEventResult } from "@earendil-works/pi-coding-agent";
+import {
+  ProjectTrustStore,
+  getAgentDir,
+  hasTrustRequiringProjectResources,
+} from "@earendil-works/pi-coding-agent";
 
 const TRUSTED_GITHUB_OWNERS = new Set(["fueled", "theskumar", "earendil-works"]);
 const GIT_TIMEOUT_MS = 5_000;
@@ -116,5 +121,25 @@ export default function trustGitHubReposExtension(pi: ExtensionAPI): void {
     }
 
     return { trusted: "undecided" };
+  });
+
+  // Pi Web reads trust from the shared store and never emits project_trust, so
+  // record the same decision there when a session starts in an undecided folder.
+  // The CLI has already decided by now, which makes this a no-op there.
+  pi.on("session_start", async (_event, ctx) => {
+    if (!hasTrustRequiringProjectResources(ctx.cwd)) return;
+    const store = new ProjectTrustStore(getAgentDir());
+    if (store.get(ctx.cwd) !== null) return;
+
+    const originUrls = await getOriginRemoteUrls(pi, ctx.cwd);
+    if (originUrls.length === 0 || !originUrls.every(isTrustedGitHubRemote)) return;
+
+    store.set(ctx.cwd, true);
+    if (ctx.hasUI) {
+      ctx.ui.notify(
+        "Trusted this project (trusted GitHub owner). Run /reload to load its project resources.",
+        "info",
+      );
+    }
   });
 }

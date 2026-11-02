@@ -34,7 +34,7 @@
  *     pi (Esc/Ctrl+C).
  */
 
-import { type Api, type Model, type UserMessage, complete } from "@earendil-works/pi-ai";
+import type { Api, Model, UserMessage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { compact } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
@@ -110,24 +110,18 @@ function getConditionText(mode: LoopMode, condition?: string): string {
   }
 }
 
-async function selectSummaryModel(
-  ctx: ExtensionContext,
-): Promise<{ model: Model<Api>; apiKey?: string; headers?: Record<string, string> } | null> {
+async function selectSummaryModel(ctx: ExtensionContext): Promise<Model<Api> | null> {
   if (!ctx.model) return null;
 
   if (ctx.model.provider === "anthropic") {
     const haikuModel = ctx.modelRegistry.find("anthropic", HAIKU_MODEL_ID);
-    if (haikuModel) {
-      const auth = await ctx.modelRegistry.getApiKeyAndHeaders(haikuModel);
-      if (auth.ok) {
-        return { model: haikuModel, apiKey: auth.apiKey, headers: auth.headers };
-      }
+    if (haikuModel && (await ctx.modelRegistry.getApiKeyAndHeaders(haikuModel)).ok) {
+      return haikuModel;
     }
   }
 
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-  if (!auth.ok) return null;
-  return { model: ctx.model, apiKey: auth.apiKey, headers: auth.headers };
+  return auth.ok ? ctx.model : null;
 }
 
 async function summarizeBreakoutCondition(
@@ -136,8 +130,8 @@ async function summarizeBreakoutCondition(
   condition?: string,
 ): Promise<string> {
   const fallback = summarizeCondition(mode, condition);
-  const selection = await selectSummaryModel(ctx);
-  if (!selection) return fallback;
+  const model = await selectSummaryModel(ctx);
+  if (!model) return fallback;
 
   const conditionText = getConditionText(mode, condition);
   const userMessage: UserMessage = {
@@ -146,13 +140,14 @@ async function summarizeBreakoutCondition(
     timestamp: Date.now(),
   };
 
-  const response = await complete(
-    selection.model,
-    { systemPrompt: SUMMARY_SYSTEM_PROMPT, messages: [userMessage] },
-    { apiKey: selection.apiKey, headers: selection.headers },
-  );
+  // The registry resolves request-time auth and knows extension providers
+  // (claude-bridge); pi-ai's compat complete() knows neither. This runs
+  // detached, so a rejection would be unhandled: fall back instead.
+  const response = await ctx.modelRegistry
+    .complete(model, { systemPrompt: SUMMARY_SYSTEM_PROMPT, messages: [userMessage] })
+    .catch(() => null);
 
-  if (response.stopReason === "aborted" || response.stopReason === "error") {
+  if (!response || response.stopReason === "aborted" || response.stopReason === "error") {
     return fallback;
   }
 

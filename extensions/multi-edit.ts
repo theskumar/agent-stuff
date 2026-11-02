@@ -51,10 +51,19 @@
  */
 
 import { constants } from "node:fs";
-import { access as fsAccess, unlink as fsUnlink, writeFile as fsWriteFile } from "node:fs/promises";
+import {
+  access as fsAccess,
+  readFile as fsReadFile,
+  unlink as fsUnlink,
+  writeFile as fsWriteFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, resolve as resolvePath } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { createEditToolDefinition, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
+import {
+  createEditToolDefinition,
+  generateUnifiedPatch,
+  withFileMutationQueue,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 // ---------------------------------------------------------------------------
@@ -360,6 +369,15 @@ function extractText(content: Array<{ type: string; text?: string }>): string {
     .join("\n");
 }
 
+/**
+ * Join per-file unified patches into one multi-file patch. Pi Web renders a result's
+ * `details.patch` as a diff view (it runs no TUI renderers); the TUI uses `details.diff`.
+ */
+function joinPatches(patches: string[]): string | undefined {
+  if (patches.length === 0) return undefined;
+  return patches.map((p) => (p.endsWith("\n") ? p : `${p}\n`)).join("");
+}
+
 function isSingleFileShape(params: Params): boolean {
   if (params.patch !== undefined) return false;
   const edits = params.edits ?? [];
@@ -411,6 +429,7 @@ export default function (pi: ExtensionAPI) {
         await preflightPatchOps(cwd, ops);
         const summaries: string[] = [];
         const diffs: string[] = [];
+        const patches: string[] = [];
         let firstChangedLine: number | undefined;
 
         for (const op of ops) {
@@ -418,18 +437,23 @@ export default function (pi: ExtensionAPI) {
 
           if (op.kind === "add") {
             const abs = resolveAbs(cwd, op.path);
+            const contents = ensureTrailingNewline(op.contents);
             await withFileMutationQueue(abs, async () => {
-              await fsWriteFile(abs, ensureTrailingNewline(op.contents), "utf-8");
+              await fsWriteFile(abs, contents, "utf-8");
             });
             summaries.push(`Added file ${op.path}.`);
+            patches.push(generateUnifiedPatch(op.path, "", contents));
             continue;
           }
           if (op.kind === "delete") {
             const abs = resolveAbs(cwd, op.path);
+            let removed = "";
             await withFileMutationQueue(abs, async () => {
+              removed = await fsReadFile(abs, "utf-8").catch(() => "");
               await fsUnlink(abs);
             });
             summaries.push(`Deleted file ${op.path}.`);
+            patches.push(generateUnifiedPatch(op.path, removed, ""));
             continue;
           }
           // Update: one edit per hunk; builtin handles BOM, line endings, mutation queue.
@@ -446,9 +470,10 @@ export default function (pi: ExtensionAPI) {
           );
           summaries.push(extractText(result.content as any));
           const details = result.details as
-            | { diff?: string; firstChangedLine?: number }
+            | { diff?: string; patch?: string; firstChangedLine?: number }
             | undefined;
           if (details?.diff) diffs.push(`File: ${op.path}\n${details.diff}`);
+          if (details?.patch) patches.push(details.patch);
           if (firstChangedLine === undefined && details?.firstChangedLine !== undefined) {
             firstChangedLine = details.firstChangedLine;
           }
@@ -461,7 +486,7 @@ export default function (pi: ExtensionAPI) {
               text: `Applied patch with ${ops.length} operation(s).\n${summaries.join("\n")}`,
             },
           ],
-          details: { diff: diffs.join("\n\n"), firstChangedLine },
+          details: { diff: diffs.join("\n\n"), patch: joinPatches(patches), firstChangedLine },
         };
       }
 
@@ -525,6 +550,7 @@ export default function (pi: ExtensionAPI) {
       await preflightEditGroups(groups);
       const summaries: string[] = [];
       const diffs: string[] = [];
+      const patches: string[] = [];
       let firstChangedLine: number | undefined;
 
       for (const g of groups.values()) {
@@ -537,8 +563,11 @@ export default function (pi: ExtensionAPI) {
           ctx,
         );
         summaries.push(extractText(result.content as any));
-        const details = result.details as { diff?: string; firstChangedLine?: number } | undefined;
+        const details = result.details as
+          | { diff?: string; patch?: string; firstChangedLine?: number }
+          | undefined;
         if (details?.diff) diffs.push(`File: ${g.displayPath}\n${details.diff}`);
+        if (details?.patch) patches.push(details.patch);
         if (firstChangedLine === undefined && details?.firstChangedLine !== undefined) {
           firstChangedLine = details.firstChangedLine;
         }
@@ -551,7 +580,7 @@ export default function (pi: ExtensionAPI) {
             text: `Applied edits across ${groups.size} files.\n${summaries.join("\n")}`,
           },
         ],
-        details: { diff: diffs.join("\n\n"), firstChangedLine },
+        details: { diff: diffs.join("\n\n"), patch: joinPatches(patches), firstChangedLine },
       };
     },
 
