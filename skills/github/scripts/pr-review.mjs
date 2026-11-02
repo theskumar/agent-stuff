@@ -19,7 +19,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const BOTS = ["coderabbitai", "copilot-pull-request-reviewer"];
+const BOTS = ["coderabbitai", "copilot-pull-request-reviewer", "rosey-code-reviewer"];
 // REST logins carry a "[bot]" suffix; GraphQL thread-comment logins do not. Normalise.
 const isBot = (login) => BOTS.includes((login || "").replace(/\[bot\]$/, ""));
 

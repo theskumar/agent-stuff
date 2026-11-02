@@ -91,6 +91,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`librarian`](skills/librarian/) | Cache and reuse remote git checkouts (GitHub, GitLab, Codeberg, Bitbucket, sourcehut, self-hosted) |
 | [`explainer-video`](skills/explainer-video/) | Narrated explainer videos from docs: TTS, animated HTML scenes, Chrome render, ffmpeg |
 | [`mermaid`](skills/mermaid/) | Validate and preview Mermaid diagrams with Pele (no browser) |
+| [`message-voice`](skills/message-voice/) | Rewrite drafted Slack messages and emails into Saurabh's voice before sending |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
 | [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |

@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: librarian
 description: "Get a stable, up-to-date local checkout of a remote git repository (GitHub, GitLab, Codeberg/Gitea/Forgejo, Bitbucket, sourcehut, or self-hosted URLs, git@... SSH, or owner/repo shorthand) so it can be read, grepped, and analyzed without repeated clones. Use this skill whenever the user points to a remote git repo as reference, pastes a repo URL, mentions a repo by owner/repo, or whenever you would otherwise run a one-off `git clone` into a temp directory. Reuses a shared cache at ~/.cache/checkouts/<host>/<org>/<repo> across turns and sessions."
 ---

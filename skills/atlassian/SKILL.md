@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: atlassian
 description: "Access Jira (and other Atlassian Cloud products) via Atlassian's official `acli` CLI — auth, projects, boards, work items, JQL search. No custom API wrapper; wraps the first-party binary."
 ---

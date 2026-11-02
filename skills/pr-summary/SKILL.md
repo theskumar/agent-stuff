@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: pr-summary
 description: Use when drafting a pull request description or filling in the repo's PULL_REQUEST_TEMPLATE for copa-backend. Produces a Summary + Test plan body that matches the project's established PR conventions.
 ---

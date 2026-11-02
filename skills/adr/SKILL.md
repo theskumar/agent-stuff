@@ -4,8 +4,6 @@ name: adr
 description: Write, supersede, or review Architecture Decision Records (ADRs).
 ---
 
-# ADR
-
 ## Find the repo's setup
 
 Before you write, find the repo's existing ADRs.
@@ -14,15 +12,18 @@ If it has none, create `docs/adr/0001-title-with-dashes.md` and a `docs/adr/READ
 
 ## Write an ADR
 
-Use these sections: Status, Date, Context, Considered Options (pros and cons for each), Decision, Consequences (Positive, Negative, Risks), Implementation Notes.
-If the repo has a template, keep its section names and order, and add any of these sections it lacks.
+If the repo has an ADR template, use its sections and order as-is.
+If it has none, use these sections: Status, Date, Context, Considered Options, Decision, Consequences (Positive, Negative, Risks), Implementation Notes.
+List at least two real options, each with pros and cons.
+Include keeping the current approach when that is a real choice.
 Use only facts from the request, the repo, and any notes you were given.
 Mark anything else as an assumption.
 Keep it under two pages.
-Name the real costs under Negative.
+Name the real costs in the consequences.
 Link related ADRs by number.
 Set Status to Proposed, Accepted, Rejected, Deprecated, or `Superseded by ADR-NNNN`.
 If the team has not agreed yet, set Status to Proposed.
+To review an ADR, check it against the rules in this section, list each gap, and leave the file unchanged.
 
 ## Change a decision
 

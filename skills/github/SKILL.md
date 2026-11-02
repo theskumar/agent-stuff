@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: github
 description: "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries. Includes pr-review.mjs, a wrapper for CodeRabbit/Copilot review-thread triage (list unresolved, reply, resolve, dashboard, wait)."
 ---

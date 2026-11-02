@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: commit
 description: "Read this skill before making git commits"
 ---

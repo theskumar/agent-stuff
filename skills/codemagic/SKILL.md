@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: codemagic
 description: "Trigger, monitor, cancel Codemagic CI builds and download artifacts — gh-cli-style. Wraps Codemagic's REST API via a Node.js script, no external deps."
 ---

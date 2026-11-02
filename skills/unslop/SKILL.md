@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: unslop
 description: >
   Cut AI tells from writing and add human voice. Remove puffery, AI vocabulary,

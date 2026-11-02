@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: technical-writing
 description: >
   Formal technical-writing standard: Diátaxis structure, Google developer

@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: slack
 description: "Read and search Slack channels, messages, threads, users, files, and reactions; create editable message drafts and perform other Slack actions after confirmation. Use whenever the user mentions Slack, channels, DMs, Slack messages, drafts, or asks to search/read/write Slack data."
 ---

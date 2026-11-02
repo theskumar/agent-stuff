@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: summarize
 description: "Convert a local file (PDF/DOCX/PPTX/HTML/etc.) into Markdown using `uvx markitdown`, optionally it can summarize. For URLs prefer the agent's web fetch tool (`fetch_content` in pi, `WebFetch` in Claude Code); use this only for local/office files or when no fetch tool is available."
 ---

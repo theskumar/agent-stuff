@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 name: html-report
 description: >-
   Produce a self-contained, on-brand HTML report for anything meant to be read,
