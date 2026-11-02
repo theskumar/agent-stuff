@@ -1,1 +1,5 @@
 node_modules/
+
+# GA4 skill: never commit a service-account key
+skills/google-analytics/service-account.json
+skills/google-analytics/**/service-account.json
