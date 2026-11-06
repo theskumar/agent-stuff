@@ -106,7 +106,10 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`web-browser`](skills/web-browser/) | Browser automation via CDP: accessibility-tree actions (`ax.js`), Obscura scraping, and `agent.mjs` to delegate a web task to a cheap inner agent |
 | [`unslop`](skills/unslop/) | Cut AI tells from prose and add human voice; takes precedence over other style guidance |
 | [`technical-writing`](skills/technical-writing/) | Formal doc standard (Diátaxis, Google style, STE, Global English) for docs/RFCs/PRs/commits; composes with `unslop` (source: [cursor/plugins](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md)) |
+| [`statechart`](skills/statechart/) | `/statechart`: model a stateful system (flow, protocol, service) in TLA+, check it with TLC, draw a Mermaid statechart with the shortest path to each broken rule. Needs Node 22.18+/Bun/Deno; first run installs TLC and Java via mise. Vendored without upstream `scripts/test/` (source: [cursor/plugins](https://github.com/cursor/plugins/tree/main/pstack/skills/statechart), MIT) |
 | [`youtube-transcript`](skills/youtube-transcript/) | Fetch timestamped YouTube video transcripts via `youtube-transcript-plus` (source: [badlogic/pi-skills](https://github.com/badlogic/pi-skills/tree/main/youtube-transcript)) |
+
+See [`CREDITS.md`](CREDITS.md) for every third-party source and its license.
 
 ## Commands
 

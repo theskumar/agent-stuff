@@ -54,7 +54,7 @@ link "$REPO_DIR/agent/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"
 
 echo "==> Skills → ~/.claude/skills/ (Claude Code)"
 # Skills that should be available in both pi and Claude Code
-CC_SKILLS=(commit github slack librarian uv summarize mermaid sentry notion pr-summary codemagic unslop technical-writing html-report youtube-transcript writing-for-agents)
+CC_SKILLS=(commit github slack librarian uv summarize mermaid sentry notion pr-summary codemagic unslop technical-writing html-report youtube-transcript writing-for-agents statechart)
 for name in "${CC_SKILLS[@]}"; do
   link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 done
