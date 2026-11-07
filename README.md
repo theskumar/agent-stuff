@@ -96,7 +96,7 @@ Markdown instruction sets (one `SKILL.md` per folder). Source: [`skills/`](skill
 | [`mermaid`](skills/mermaid/) | Validate and preview Mermaid diagrams with Pele (no browser) |
 | [`message-voice`](skills/message-voice/) | Rewrite drafted Slack messages and emails into Saurabh's voice before sending |
 | [`notion`](skills/notion/) | Notion read/write pages as markdown via the official `ntn` CLI, plus a JS exec sandbox |
-| [`pr-summary`](skills/pr-summary/) | Generate PR descriptions following project conventions from code diffs |
+| [`pr`](skills/pr/) | `/skill:pr` (pi) or `/pr` (Claude Code): PR title and body from the diff: context, summary visual, before/after evidence, merge danger (one-way/two-way door, blast radius); `gh pr create --body-file` (adapted from [mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/engineering/pr/SKILL.md)) |
 | [`sentry`](skills/sentry/) | Fetch and analyze Sentry issues, events, and logs |
 | [`slack`](skills/slack/) | Read and search Slack (catchup, threads, users) and create editable drafts through the Claude.ai Slack connector, no bot token |
 | [`summarize`](skills/summarize/) | Local files (PDF/DOCX/PPTX) to Markdown plus optional summary; use `fetch_content` for URLs |

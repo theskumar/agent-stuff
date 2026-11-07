@@ -8,6 +8,7 @@ When you vendor or adapt something, add a row here and keep the `(source: ...)` 
 
 | Item | Upstream | Author | License | Notes |
 |---|---|---|---|---|
+| [pr](skills/pr/) | [mattpocock/skills: engineering/pr](https://github.com/mattpocock/skills/blob/main/skills/engineering/pr/SKILL.md) | Matt Pocock | MIT ([LICENSE](skills/pr/LICENSE)) | Adapted at upstream commit e484a80 and merged with the old local `pr-summary`. The Summary visual menu comes from Dex Horthy's [show-me](https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md) (HumanLayer, MIT) by way of Matt's skill; the sensitive-area list from Warp's [merge-risk](https://github.com/warpdotdev/common-skills/blob/main/.agents/skills/merge-risk/SKILL.md) (MIT). |
 | [statechart](skills/statechart/) | [cursor/plugins: pstack/skills/statechart](https://github.com/cursor/plugins/tree/main/pstack/skills/statechart) | Lauren Tan | MIT ([LICENSE](skills/statechart/LICENSE)) | Copied at upstream commit 2776ddd (2026-11-05), pstack 0.15.36. Upstream `scripts/test/` left out (2.7 MB corpus, not needed at runtime). |
 | [technical-writing](skills/technical-writing/) | [cursor/plugins: pstack/skills/technical-writing](https://github.com/cursor/plugins/blob/main/pstack/skills/technical-writing/SKILL.md) | Lauren Tan | MIT | |
 | [writing-for-agents](skills/writing-for-agents/) | [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-for-agents) | Matt Pocock | See upstream | Adapted. |
