@@ -111,7 +111,16 @@ for name in "${CC_PROMPTS[@]}"; do
 done
 
 echo "==> Pruning dead symlinks"
-find "$HOME/.pi/agent" "$HOME/.agents" "$HOME/.claude" \
-     -xtype l -print -delete 2>/dev/null || true
+# Only links this script made (they point into the repo or ~/.agents/skills).
+# `! -exec test -e` instead of GNU-only `-xtype l`, so this works on macOS.
+# ~/.claude/skills/synced belongs to Claude Desktop; leave it alone.
+{ find "$HOME/.pi/agent" "$HOME/.agents" "$HOME/.claude" "$HOME/.local/bin" \
+       -path "$HOME/.claude/skills/synced" -prune -o \
+       -type l ! -exec test -e {} \; -print 2>/dev/null || true; } |
+  while IFS= read -r dead; do
+    case "$(readlink "$dead")" in
+      "$REPO_DIR"/* | "$HOME/.agents/skills"/*) rm "$dead" && echo "  pruned $dead" ;;
+    esac
+  done
 
 echo "Done."
