@@ -17,7 +17,7 @@ pi TypeScript extensions. Source: [`extensions/`](extensions/).
 | Extension | Purpose |
 |---|---|
 | [`multi-edit.ts`](extensions/multi-edit.ts) | Overrides built-in `edit` with multi-file `edits[]` and Codex `patch` support |
-| [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder) |
+| [`review.ts`](extensions/review.ts) | `/review` workflow (uncommitted, branch, commit, PR, folder). PR and branch reviews open with a Merge Risk section (alignment, impact, verification, rollback cost, error detection) using the PR body, linked issues and CI checks; the extension computes low/medium/high from the `review-meta` trailer and never lets it affect blocking (rubric adapted from [warpdotdev/common-skills merge-risk](https://github.com/warpdotdev/common-skills/blob/main/.agents/skills/merge-risk/SKILL.md), MIT) |
 | [`prompt-editor.ts`](extensions/prompt-editor.ts) | Named model+thinking presets, cross-session prompt history, low-battery indicator (`.pi/battery.json` / `PI_BATTERY_THRESHOLD` / `PI_BATTERY_DISABLE`) |
 | [`session-name.ts`](extensions/session-name.ts) | `Ctrl+Shift+N` prefilled session rename dialog; mirrors the session name into the tmux window name (restores the prior name on quit) |
 | [`session-title.ts`](extensions/session-title.ts) | `/title` and `Ctrl+Alt+N` generate a session name from the conversation with one cheap model call (pi-web's "Generate title" algorithm); auto-titles on `agent_settled` at user-turn thresholds (default 2 and 6) and stops once you rename by hand. Config: `~/.pi/agent/extensions/session-title.config.json` (`auto`, `autoAtTurns`, `model`: `fast` / `current` / `provider/id`, `shortcut`); `/title status` shows state |

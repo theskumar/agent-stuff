@@ -24,6 +24,7 @@ When you vendor or adapt something, add a row here and keep the `(source: ...)` 
 | [trust-github-repos.ts](extensions/trust-github-repos.ts) | [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) | Owner allowlist customized. |
 | [split-fork.ts](extensions/split-fork.ts) | [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) | Adapted: Ghostty to tmux/herdr. |
 | [handoff.ts](extensions/handoff.ts) | [hjanuschka/shitty-extensions](https://github.com/hjanuschka/shitty-extensions) | Adapted for mid-task continuation. |
+| [review.ts](extensions/review.ts) | [warpdotdev/common-skills: merge-risk](https://github.com/warpdotdev/common-skills/blob/main/.agents/skills/merge-risk/SKILL.md) | Merge-risk rubric (MIT, Copyright (c) 2026 Denver Technologies, Inc.; itself derived from Matt Pocock's `pr` skill) adapted for PR and branch reviews; the risk level is computed in code, with floors added. Notice kept in the file's merge-risk comment. |
 | [inline-bash.ts](extensions/inline-bash.ts) | [earendil-works/pi examples](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/inline-bash.ts) | |
 
 ## Prompts
