@@ -24,7 +24,11 @@
  *      `cacheRetention: "none"`, a fresh session id, 256 max tokens, and the
  *      cheapest thinking level the model supports.
  *   4. Clean up the reply: first line only, strip fences, JSON, "Title:"
- *      labels, quotes, and trailing periods, cap at 80 chars.
+ *      labels, quotes, and trailing periods, then cap at 40 chars, trimmed
+ *      back to a word boundary (no ellipsis; displays add their own).
+ *
+ *   The prompt asks for a short keyword-style headline (2-4 words, one
+ *   topic), not a sentence, so the name stays readable in a narrow tab.
  *
  * Auto mode:
  *   After each `agent_settled` (the run is done and pi will not continue on
@@ -32,7 +36,9 @@
  *   reaches the next threshold in `autoAtTurns`, generate a title in the
  *   background. The default `[2, 6]` names the session after the second
  *   prompt and refines it once at the sixth, so a session costs at most two
- *   title calls. Auto mode only touches a session that has no name or still
+ *   title calls. The refine pass is given the current title and replies
+ *   `KEEP` unless the session has clearly changed topic, so the name only
+ *   churns when the work did. Auto mode only touches a session that has no name or still
  *   carries the last auto-generated title. A rename from `/name`,
  *   `Ctrl+Shift+N`, or pi-web stops it for that session.
  *
@@ -71,7 +77,7 @@ const STATUS_KEY = "session-title";
 
 const TITLE_TIMEOUT_MS = 90_000;
 const TITLE_MAX_TOKENS = 256;
-const MAX_TITLE_LENGTH = 80;
+const MAX_TITLE_LENGTH = 40;
 
 // Per-message caps. User turns carry intent (including mid-session pivots),
 // the last reply carries the outcome, and earlier replies only need their
@@ -90,14 +96,36 @@ const IMAGE_PLACEHOLDER = "[image]";
 
 const TITLE_SYSTEM_PROMPT = "You name chat sessions from a transcript. Reply with the title only.";
 
-const TITLE_PROMPT = `Create a concise title for this session based on the conversation above.
+// Shared style rules. The goal is a short keyword headline that stays
+// readable in a 20-char tab or an ellipsis-truncated sidebar row, not a
+// sentence. Examples teach the compression, not just the shape.
+const TITLE_RULES = `Rules:
+- 2-4 words. Aim for 24 characters or fewer; never exceed 32.
+- One topic only. Never join two subjects with "and", a comma, or a colon.
+- A noun phrase with the most specific word first (a product, name, or subject).
+- Drop openers like "How", "Understanding", "Choosing a", "Setting up", "Fix".
+- Keep proper nouns and product names exactly as written (pi-schema, GitHub, Kite); sentence case otherwise.
+- Do not include the project or folder name.
+- Match the user's primary language. For CJK, aim for 8-12 characters in the same keyword style.
+- Return only the title as plain text: no quotes, label, markdown, or explanation.
 
-Requirements:
-- Match the primary language used by the user.
-- Describe the user's concrete goal or the outcome, not the act of chatting.
-- Use 4-12 words for space-separated languages, or 8-24 characters for CJK text when practical.
-- Do not call any tools.
-- Return only the title as plain text, with no quotes, label, markdown, or explanation.`;
+Examples (verbose idea -> title):
+- Finding a microphone for home calls and dictation -> Desk mic for calls
+- Portfolio gaps and Kite API integration for learning -> Portfolio gaps via Kite
+- Understanding OpenAI's faster FFT -> OpenAI faster FFT
+- Repot houseplants with amended soil before winter -> Repot houseplants`;
+
+const FRESH_TITLE_PROMPT = `Name this session with a short, keyword-style title, like a headline you would scan in a list.
+
+${TITLE_RULES}`;
+
+function refineTitlePrompt(current: string): string {
+  return `This session already has the title: "${current}".
+
+Decide whether it still names the session's main topic. If it does, reply with exactly KEEP and nothing else. Only if the session has clearly shifted to a different topic, reply with a new title. Never merge the old topic and a new one.
+
+${TITLE_RULES}`;
+}
 
 const DEFAULT_SHORTCUT = "ctrl+alt+n";
 
@@ -351,7 +379,12 @@ export function parseGeneratedTitle(raw: string): string {
   }
   const characters = Array.from(value);
   if (characters.length > MAX_TITLE_LENGTH) {
-    value = characters.slice(0, MAX_TITLE_LENGTH).join("").trim();
+    const sliced = characters.slice(0, MAX_TITLE_LENGTH).join("");
+    // Trim back to the last word boundary when there is one (space-separated
+    // languages); CJK has none, so the hard slice stands. No ellipsis: every
+    // display that needs one adds its own.
+    const lastSpace = sliced.lastIndexOf(" ");
+    value = (lastSpace > MAX_TITLE_LENGTH / 2 ? sliced.slice(0, lastSpace) : sliced).trim();
   }
   return value;
 }
@@ -388,12 +421,17 @@ function lastTitleEntry(entries: SessionEntry[]): TitleEntryData | undefined {
 
 type GeneratedTitle = {
   title: string;
+  kept: boolean;
   model: Model<Api>;
   userTurns: number;
   usage?: AssistantMessage["usage"];
 };
 
-async function generateTitle(ctx: ExtensionContext, config: TitleConfig): Promise<GeneratedTitle> {
+async function generateTitle(
+  ctx: ExtensionContext,
+  config: TitleConfig,
+  currentTitle?: string,
+): Promise<GeneratedTitle> {
   const sm = ctx.sessionManager;
   const { messages } = buildSessionContext(sm.getEntries(), sm.getLeafId());
   const transcript = buildTitleTranscript(messages as LooseMessage[]);
@@ -402,12 +440,13 @@ async function generateTitle(ctx: ExtensionContext, config: TitleConfig): Promis
   const model = resolveTitleModel(ctx, config.model);
   if (!model) throw new Error("No model available for title generation");
 
+  const instruction = currentTitle ? refineTitlePrompt(currentTitle) : FRESH_TITLE_PROMPT;
   const context: Context = {
     systemPrompt: TITLE_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: [{ type: "text", text: `${transcript}\n\n${TITLE_PROMPT}` }],
+        content: [{ type: "text", text: `${transcript}\n\n${instruction}` }],
         timestamp: Date.now(),
       },
     ],
@@ -437,10 +476,17 @@ async function generateTitle(ctx: ExtensionContext, config: TitleConfig): Promis
       .join("\n")
       .trim();
     if (!text) throw new Error("The model did not return a session title");
+    const userTurns = countUserTurns(sm.getBranch());
+    // The refine pass replies with exactly KEEP when the current title still
+    // fits; take it verbatim so the name does not churn.
+    if (currentTitle && /^keep\b/i.test(text.trim())) {
+      return { title: currentTitle, kept: true, model, userTurns, usage: message.usage };
+    }
     return {
       title: parseGeneratedTitle(text),
+      kept: false,
       model,
-      userTurns: countUserTurns(sm.getBranch()),
+      userTurns,
       usage: message.usage,
     };
   } finally {
@@ -482,10 +528,25 @@ export default function (pi: ExtensionAPI): void {
     if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", "✎ naming…"));
 
     try {
-      const result = await generateTitle(ctx, config);
+      // Only the auto refine pass (turn 6) compares against the existing name;
+      // manual /title always regenerates fresh.
+      const refineFrom =
+        mode === "auto" && nameBefore && nameBefore.trim() ? nameBefore : undefined;
+      const result = await generateTitle(ctx, config, refineFrom);
       if (epoch !== startEpoch) return;
       // A manual rename that landed mid-generation wins over an auto title.
       if (mode === "auto" && pi.getSessionName() !== nameBefore) return;
+
+      // Refine decided the current title still fits: record the pass (so a
+      // restart does not retry turn 6) but leave the name and tab untouched.
+      if (result.kept) {
+        pi.appendEntry<TitleEntryData>(ENTRY_TYPE, {
+          title: result.title,
+          userTurns: result.userTurns,
+          model: `${result.model.provider}/${result.model.id}`,
+        });
+        return;
+      }
 
       pi.appendEntry<TitleEntryData>(ENTRY_TYPE, {
         title: result.title,
