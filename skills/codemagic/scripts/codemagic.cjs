@@ -242,6 +242,62 @@ async function watch(buildId, flags) {
   }
 }
 
+function requestText(apiPath) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(API_BASE + apiPath);
+    https
+      .get(
+        {
+          hostname: url.hostname,
+          path: url.pathname + url.search,
+          headers: { "x-auth-token": getApiToken() },
+        },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            if (res.statusCode >= 400)
+              return reject(new Error("HTTP " + res.statusCode + ": " + data.slice(0, 500)));
+            resolve(data);
+          });
+        }
+      )
+      .on("error", reject);
+  });
+}
+
+async function logs(buildId, flags) {
+  if (!buildId) {
+    console.error("Usage: logs <buildId> [--step name] [--all] [--tail N]");
+    process.exit(1);
+  }
+  const data = await request("GET", "/builds/" + buildId);
+  const b = data.build || data;
+  const steps = b.buildActions || [];
+  for (const [i, a] of steps.entries()) console.log(i + 1 + ". [" + a.status + "] " + a.name);
+  let pick;
+  if (flags.step) {
+    const q = String(flags.step).toLowerCase();
+    pick = steps.filter((a) => (a.name || "").toLowerCase().includes(q));
+  } else if (flags.all) {
+    pick = steps;
+  } else {
+    pick = steps.filter((a) => !["success", "skipped", "not_started"].includes(a.status));
+  }
+  if (pick.length === 0) {
+    console.log("\nNo step logs selected. Use --step <name> or --all.");
+    return;
+  }
+  const tail = flags.tail === undefined ? 200 : parseInt(flags.tail);
+  for (const a of pick) {
+    let text = await requestText("/builds/" + buildId + "/step/" + a._id);
+    const lines = text.split("\n");
+    if (tail > 0 && lines.length > tail)
+      text = "... (" + (lines.length - tail) + " earlier lines cut, use --tail 0 for all)\n" + lines.slice(-tail).join("\n");
+    console.log("\n===== " + a.name + " [" + a.status + "] =====\n" + text);
+  }
+}
+
 async function artifacts(buildId) {
   if (!buildId) {
     console.error("Usage: artifacts <buildId>");
@@ -348,7 +404,7 @@ function parseArgs(args) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0) {
+  if (args.length === 0 || ["help", "--help", "-h"].includes(args[0])) {
     console.log(`Usage: node codemagic.cjs <command> [args]
 
 Commands:
@@ -360,6 +416,7 @@ Commands:
   trigger --app A --workflow W  Start build (--branch, --tag, --var K=V, --input K=V, --label L)
   watch <buildId>               Poll until done (--interval secs, --timeout secs); exit 0 iff finished
   cancel <buildId>              Cancel running build
+  logs <buildId>                Step list, then logs of failed steps (--step name, --all, --tail N; default 200, 0 = all)
   artifacts <buildId>           List artifacts with URLs
   download <buildId>            Download artifacts (--name pattern, --dir .)
   api <METHOD> <path>           Raw API call (--data '{...}')`);
@@ -387,6 +444,8 @@ Commands:
       return watch(positional[0], flags);
     case "cancel":
       return cancel(positional[0]);
+    case "logs":
+      return logs(positional[0], flags);
     case "artifacts":
       return artifacts(positional[0]);
     case "download":
